@@ -1,5 +1,4 @@
-
-# Live Drowsiness Detector
+# Sentinel Drive-Assist
 
 Provide an introductory paragraph, describing:
 
