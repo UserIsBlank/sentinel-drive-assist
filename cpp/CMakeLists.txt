@@ -3,4 +3,4 @@ project(sentinel_drive_assist)
 
 set(CMAKE_CXX_STANDARD 23)
 
-add_executable(sentinel_drive_assist Source/main.cpp)
+add_executable(sentinel_drive_assist cpp/Source/main.cpp)
