@@ -1,7 +1,5 @@
 # Sentinel Drive-Assist
 
-Provide an introductory paragraph, describing:
-
 Sentinel Drive Assist helps drivers stay awake and alert while on the road, ensuring a safe trip from point A to point B. We are creating a drowsiness detection driver alert system which will alert a ground vehicle driver when they are sleepy. The device will monitor the drivers head and eye movements and play a loud sound when it detects drowsiness in the driver of the vehicle while the car is not in park. We want to help ensure the safety of drivers in ground vehicles and make sure that people get to where they want to go without any accidents or mishaps.
 * Link to project home page
 
@@ -176,7 +174,7 @@ This project is licensed under the MIT License - see [LICENSE.md](LICENSE.md) fi
 
 # Authors
 
-* **[Joshua Ha](https://github.com/UserIsBlank)** - *Initial work* - [Embedded Artistry](https://github.com/embeddedartistry)
+* **[Joshua Ha](https://github.com/UserIsBlank)** - [Project Manager / CV Engineer]
 
 
 **[Back to top](#table-of-contents)**
