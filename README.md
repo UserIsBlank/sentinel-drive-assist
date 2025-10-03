@@ -81,7 +81,28 @@ git clone git@github.com:embeddedartistry/embedded-resources.git
 Instructions for how to build your project
 
 ```
-Examples should be included
+    mkdir build
+    cd build
+    
+    
+    For Mac:
+    
+    	cmake .. -G Xcode
+    
+    For Windows:
+    
+    	cmake .. -G "Visual Studio 17 2022"
+    
+    For VS Code (Regardless of Platform):
+    
+    	Open the CMakeLists.txt using VS Code.
+    	
+    	Make sure CMake and C/C++ extensions are installed
+    
+    For CLion (regardless of platform):
+    
+    	Just open the folder within the IDE
+
 ```
 
 ## Running Tests
