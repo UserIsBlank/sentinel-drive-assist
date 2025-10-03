@@ -2,8 +2,7 @@
 
 Provide an introductory paragraph, describing:
 
-* What your project does
-* Why people should consider using your project
+Sentinel Drive Assist helps drivers stay awake and alert while on the road, ensuring a safe trip from point A to point B. We are creating a drowsiness detection driver alert system which will alert a ground vehicle driver when they are sleepy. The device will monitor the drivers head and eye movements and play a loud sound when it detects drowsiness in the driver of the vehicle while the car is not in park. We want to help ensure the safety of drivers in ground vehicles and make sure that people get to where they want to go without any accidents or mishaps.
 * Link to project home page
 
 ## Table of Contents
