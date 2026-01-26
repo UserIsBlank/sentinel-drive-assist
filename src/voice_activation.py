@@ -2,13 +2,35 @@ import speech_recognition as sr
 
 activate_word = "hey sentinel"
 
-def voice_activate():
+# possible commands dictionary:
+VOICE__COMMANDS = {
+    # mute alarm commands
+    "stop alarm": "STOP_ALARM",
+    "mute": "STOP_ALARM",
+    "silence": "STOP_ALARM",
+    "stop": "STOP_ALARM",
+    "quiet": "STOP_ALARM",
+    "shut up": "STOP_ALARM",
+    "no sound": "STOP_ALARM",
+    "no alarm": "STOP_ALARM",
+
+    # deactivate listening commands
+    "deactivate": "DEACTIVATE_LISTENING",
+    "stop listening": "DEACTIVATE_LISTENING",
+    "sleep": "DEACTIVATE_LISTENING",
+
+    # shut down device commands
+    "shut down": "SHUT_DOWN_DEVICE",
+    "power off": "SHUT_DOWN_DEVICE",
+    "turn off": "SHUT_DOWN_DEVICE",
+}
+
+def voice_activate(command): #argument is a function in main program to execute commands
     r = sr.Recognizer()
 
     is_active = False # sentinel's default setting is inactive (not listening); True = actively listening for commands
-    alarm_on = True # alarm is default on -- update once connected to actual alarm
 
-    with sr.Microphone() as source:
+    with sr.Microphone() as source: #update to correct microphone source when hardware arrives
         r.adjust_for_ambient_noise(source, duration=2) #take 2 seconds to calibrate and adapt for background noise
         print("Say \'Hey Sentinel\' to activate\n")
         
@@ -38,25 +60,25 @@ def voice_activate():
                         # --- todo: update to connect to rest of device --- #
                     else:
                         print("Sentinel is waiting for activation word.")
+                    continue
                         
                 # "hey sentinel" has been said (can say commands)
-                else:
-                    if (alarm_on) and ("stop alarm" in audio_text or "mute" in audio_text): # turn off alarm if it's playing
-                        alarm_on = False
-                        print("Alarm off.")
-                        # --- todo: update to connect to alarm --- #
-                    elif "deactivate" in audio_text or "stop listening" in audio_text: # turn off voice activation
-                        is_active = False
-                        print("Listening deactivated. Waiting for activation word.")
-                    elif "shut down" in audio_text: # shut down whole device
-                        print("Sentinel shutting down.")
+                match_input = None
+                for phrase, cmd in VOICE__COMMANDS.items():
+                    if phrase in audio_text:
+                        match_input = cmd
                         break
-                        # -- todo: update to connect to rest of device -- #
-                    else:
-                        print("Command not recognized.")
+                if match_input is None:
+                    print("Command not recognized. Please try again.")
+                    continue
+
+                # execute matched command (send to main program)
+                command(match_input)
+
+                # deactivate listening or shut down device to stop script
+                if match_input == "DEACTIVATE_LISTENING":
+                    is_active = False
+                elif match_input == "SHUT_DOWN_DEVICE":
+                    break
             except KeyboardInterrupt:
                 break
-
-
-if __name__ == "__main__":
-    voice_activate()
