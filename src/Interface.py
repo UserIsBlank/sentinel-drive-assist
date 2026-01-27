@@ -8,6 +8,9 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.core.audio import SoundLoader
 from kivy.properties import StringProperty, NumericProperty, ObjectProperty, BooleanProperty
+from kivy.uix.popup import Popup
+from kivy.uix.label import Label
+from kivy.uix.button import Button
 from kivy.event import EventDispatcher
 import os
 
@@ -25,6 +28,7 @@ class AudioManager(EventDispatcher):
     current_sound = ObjectProperty(None, allownone=True)
     volume_level = NumericProperty(0.5)  # Default 50%
     is_muted = BooleanProperty(False)
+    selected_file = StringProperty(None)
 
     def play_track(self, path):
         if not path:
@@ -45,6 +49,10 @@ class AudioManager(EventDispatcher):
         if self.current_sound:
             self.current_sound.stop()
 
+    def set_default(self, path):
+        self.selected_file = path
+        print(f"[System] Default Alert Saved: {path}")
+
     def set_volume(self, value_0_to_100):
         self.volume_level = value_0_to_100 / 100.0
         self._apply_volume()
@@ -63,6 +71,7 @@ class AudioManager(EventDispatcher):
 
 class SoundItem(ButtonBehavior, BoxLayout):
     sound_file = StringProperty(None)
+    is_selected = BooleanProperty(False)
 
     def on_press(self):
         self.opacity = 0.5
@@ -72,7 +81,38 @@ class SoundItem(ButtonBehavior, BoxLayout):
         app = App.get_running_app()
         if app and app.audio_manager:
             app.audio_manager.play_track(self.sound_file)
+            self.show_confirmation_popup(app.audio_manager)
 
+    def show_confirmation_popup(self, audio_manager):
+        # Create the popup content
+        content = BoxLayout(orientation='vertical', padding=10, spacing=10)
+
+        lbl = Label(text=f"Set '{self.text}' as your\ndefault alert sound?",
+                    halign='center', font_size='18sp')
+
+        btn_layout = BoxLayout(spacing=10, size_hint_y=None, height="50dp")
+
+        btn_yes = Button(text="Yes, Save", background_color=(0.4, 0.8, 0.4, 1))
+        btn_no = Button(text="Cancel", background_color=(0.8, 0.4, 0.4, 1))
+
+        btn_layout.add_widget(btn_yes)
+        btn_layout.add_widget(btn_no)
+        content.add_widget(lbl)
+        content.add_widget(btn_layout)
+
+        # Create the Popup Window
+        popup = Popup(title="Confirm Selection", content=content,
+                      size_hint=(None, None), size=("300dp", "200dp"))
+
+        # Bind Button Actions
+        btn_yes.bind(on_release=lambda x: self.confirm_selection(popup, audio_manager))
+        btn_no.bind(on_release=popup.dismiss)
+
+        popup.open()
+
+    def confirm_selection(self, popup, audio_manager):
+        audio_manager.set_default(self.sound_file)
+        popup.dismiss()
 
 class ImageButton(ButtonBehavior, BoxLayout):
     pass
@@ -84,6 +124,7 @@ class FailSafeButton(ButtonBehavior, BoxLayout):
 
 class Interface(FloatLayout):
     audio_manager = ObjectProperty(None)
+
     def on_failsafe_press(self):
         print("Fail-safe activated!")
         app = App.get_running_app()
