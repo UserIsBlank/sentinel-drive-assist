@@ -1,4 +1,7 @@
 from voice_activation import voice_activate
+from Interface import SentinelApp
+import threading
+from kivy.app import App
 
 print('Welcome to Sentinel')
 
@@ -7,6 +10,9 @@ alarm_on = True  # alarm is default on -- update once connected to actual alarm
 def execute_voice_command(command):
     global alarm_on
     if command == "STOP_ALARM":
+        app = App.get_running_app()
+        if app:
+            app.trigger_failsafe()
         if alarm_on:
             print("Stopping Alarm")
             alarm_on = False
@@ -19,8 +25,16 @@ def execute_voice_command(command):
         # Add flags as needed
     elif command == "SHUT_DOWN_DEVICE":
         print("Shutting down Sentinel. Goodbye!")
+        app = App.get_running_app()
+        if app:
+            app.stop()
         # Add logic to shut down the device
         # clean up resources
 
-if __name__ == "__main__":
+def start_voice_listening():
     voice_activate(execute_voice_command)
+
+if __name__ == "__main__":
+    voice_thread = threading.Thread(target=start_voice_listening, daemon=True)
+    voice_thread.start()
+    SentinelApp().run()

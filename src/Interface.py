@@ -12,6 +12,7 @@ from kivy.uix.popup import Popup
 from kivy.uix.label import Label
 from kivy.uix.button import Button
 from kivy.event import EventDispatcher
+from kivy.clock import mainthread
 import os
 
 kivy.require('1.11.1')
@@ -141,6 +142,8 @@ class SentinelApp(App):
 
             return Interface()
 
-
-if __name__ == '__main__':
-    SentinelApp().run()
+        @mainthread
+        def trigger_failsafe(self):
+            if self.audio_manager:
+                print("[System] Fail-safe triggered via Voice Command!")
+                self.audio_manager.stop_track()
