@@ -62,12 +62,15 @@ class AudioManager(EventDispatcher):
         self.is_muted = not self.is_muted
         self._apply_volume()
 
-    def _apply_volume(self):
+    def _apply_volume(self, volume=50):
+        self.volume_level = volume
         if self.current_sound:
             if self.is_muted:
                 self.current_sound.volume = 0
             else:
                 self.current_sound.volume = self.volume_level
+    def get_volume(self):
+        return self.volume_level
 
 
 class SoundItem(ButtonBehavior, BoxLayout):
@@ -141,6 +144,9 @@ class SentinelApp(App):
             Builder.load_file('interface.kv')
 
             return Interface()
+
+        def set_volume(self, value_0_to_100):
+            self.audio_manager.apply_volume(value_0_to_100)
 
         @mainthread
         def trigger_failsafe(self):
