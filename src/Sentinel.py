@@ -36,5 +36,4 @@ def start_voice_listening():
 if __name__ == "__main__":
     voice_thread = threading.Thread(target=start_voice_listening, daemon=True)
     voice_thread.start()
-
     SentinelApp().run()
