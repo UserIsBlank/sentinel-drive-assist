@@ -62,8 +62,7 @@ class AudioManager(EventDispatcher):
         self.is_muted = not self.is_muted
         self._apply_volume()
 
-    def _apply_volume(self, volume=50):
-        self.volume_level = volume
+    def _apply_volume(self):
         if self.current_sound:
             if self.is_muted:
                 self.current_sound.volume = 0
@@ -84,10 +83,9 @@ class SoundItem(ButtonBehavior, BoxLayout):
         self.opacity = 1.0
         app = App.get_running_app()
         if app and app.audio_manager:
-            app.audio_manager.play_track(self.sound_file)
-            self.show_confirmation_popup(app.audio_manager)
+            self.show_confirmation_popup()
 
-    def show_confirmation_popup(self, audio_manager):
+    def show_confirmation_popup(self):
         # Create the popup content
         content = BoxLayout(orientation='vertical', padding=10, spacing=10)
 
@@ -104,27 +102,37 @@ class SoundItem(ButtonBehavior, BoxLayout):
         content.add_widget(lbl)
         content.add_widget(btn_layout)
 
-        # Create the Popup Window
         popup = Popup(title="Confirm Selection", content=content,
                       size_hint=(None, None), size=("300dp", "200dp"))
 
         # Bind Button Actions
-        btn_yes.bind(on_release=lambda x: self.confirm_selection(popup, audio_manager))
+        btn_yes.bind(on_release=lambda x: self.confirm_selection(popup))
         btn_no.bind(on_release=popup.dismiss)
 
         popup.open()
 
-    def confirm_selection(self, popup, audio_manager):
-        audio_manager.set_default(self.sound_file)
+    def confirm_selection(self, popup):
+        app = App.get_running_app()  # You must get the running app here again
+        # 1. Update the AudioManager property
+        app.audio_manager.set_default(self.sound_file)
+        # 2. Update the config and write to file
+        app.config.set('Audio', 'default_sound', self.sound_file)
+        app.config.write()
         popup.dismiss()
 
 class ImageButton(ButtonBehavior, BoxLayout):
     pass
 
-
 class FailSafeButton(ButtonBehavior, BoxLayout):
     pass
 
+class DetectionButton(ButtonBehavior, BoxLayout):
+    def on_release(self):
+        app = App.get_running_app()
+        app.toggle_detection()
+        if app.detection_active and app.audio_manager.selected_file:
+            print(f"[System] Testing Alarm: {app.audio_manager.selected_file}")
+            app.audio_manager.play_track(app.audio_manager.selected_file)
 
 class Interface(FloatLayout):
     audio_manager = ObjectProperty(None)
@@ -138,15 +146,40 @@ class Interface(FloatLayout):
 
 class SentinelApp(App):
         audio_manager = ObjectProperty(None)
+        detection_active = BooleanProperty(False)
+
+        def build_config(self, config):
+            config.setdefaults('Audio', {'default_sound': '../audio/alert1.mp3'})
+            config.setdefaults('System', {'drowsiness_detection': 'false'})
 
         def build(self):
             self.audio_manager = AudioManager()
-            Builder.load_file('interface.kv')
 
+            saved_sound = self.config.get('Audio', 'default_sound')
+
+            if not saved_sound or saved_sound == 'None':
+                print("[System] Config was empty. Resetting to default.")
+                saved_sound = '../audio/alert1.mp3'
+                self.config.set('Audio', 'default_sound', saved_sound)
+                self.config.write()
+
+            self.audio_manager.selected_file = saved_sound
+            print(f"[System] Startup Sound Loaded: {saved_sound}")
+
+            saved_detection = self.config.get('System', 'drowsiness_detection')
+            self.detection_active = True if saved_detection == 'True' else False
+
+            Builder.load_file('interface.kv')
             return Interface()
 
         def set_volume(self, value_0_to_100):
             self.audio_manager.apply_volume(value_0_to_100)
+
+        def toggle_detection(self):
+            self.detection_active = not self.detection_active
+            self.config.set('System', 'drowsiness_detection', str(self.detection_active))
+            self.config.write()
+            print(f"[System] Drowsiness Detection: {'Enabled' if self.detection_active else 'Disabled'}")
 
         @mainthread
         def trigger_failsafe(self):

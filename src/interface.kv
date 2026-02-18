@@ -1,22 +1,29 @@
 #:kivy 1.11.1
 #:import get_color_from_hex kivy.utils.get_color_from_hex
+
 <Interface>:
     Label:
         text: 'Sentinel Drive-Assist'
         font_name: "SentinelFont"
         font_size: '42sp'
         bold: True
-        # Use pos_hint for responsive placement
         pos_hint: {'center_x': 0.5, 'top': 0.92}
         size_hint_y: None
         height: self.texture_size[1]
 
-    FailSafeButton:
-        pos_hint: {'center_x': 0.35, 'center_y': 0.55}
+    BoxLayout:
+        orientation: 'vertical'
         size_hint: None, None
+        size: "200dp", "350dp"
+        pos_hint: {'center_x': 0.25, 'center_y': 0.55}
+        spacing: "20dp"
 
-        size: "250dp", "250dp"
-        on_press: root.on_failsafe_press()
+        DetectionButton:
+            size_hint: 1, 1
+
+        FailSafeButton:
+            size_hint: 1, 1
+            on_press: root.on_failsafe_press()
 
     BoxLayout:
         orientation: 'vertical'
@@ -41,7 +48,7 @@
             font_size: '24sp'
             bold: True
             size_hint_y: None
-            height: "60dp" # Fixed height for header
+            height: "60dp"
 
         # Divider Line
         Widget:
@@ -65,17 +72,21 @@
                 sound_file: '../audio/alert1.mp3'
             SoundItem:
                 text: "Alert Sound #2"
+                sound_file: '../audio/alert2.mp3'
             SoundItem:
                 text: "Alert Sound #3"
+                sound_file: '../audio/alert3.mp3'
             SoundItem:
                 text: "Alert Sound #4"
+                sound_file: '../audio/alert4.mp3'
             SoundItem:
                 text: "Alert Sound #5"
+                sound_file: '../audio/alert5.mp3'
 
             Widget:
                 size_hint_y: 1
 
-    # 4. SLIDER CONTROL AREA
+    # Volume Slider Control
     BoxLayout:
         orientation: 'horizontal'
         size_hint: None, None
@@ -146,11 +157,43 @@
         bold: True
         size_hint_y: 0.3
 
+<DetectionButton>:
+    orientation: 'vertical'
+    padding: "20dp"
+    spacing: "5dp"
+
+    canvas.before:
+        Color:
+            # Green if Active, Red if Inactive
+            rgba: (0.4, 0.8, 0.4, 1) if app.detection_active else (0.8, 0.4, 0.4, 1)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [30,]
+        Color:
+            rgba: 0, 0, 0, 0.3
+        RoundedRectangle:
+            pos: self.x - 4, self.y - 4
+            size: self.size
+            radius: [30,]
+
+    Image:
+        source: '../icons/coffee.png'
+        size_hint_y: 0.7
+        allow_stretch: True
+
+    Label:
+        # Dynamic Text
+        text: "DETECTION: ON" if app.detection_active else "DETECTION: OFF"
+        font_name: "SentinelFont"
+        font_size: '22sp' # Reduced slightly to fit
+        bold: True
+        size_hint_y: 0.3
+
 <SoundItem>:
     is_selected: True if app.audio_manager.selected_file == self.sound_file else False
 
     canvas.after:
-        # Border Line (existing)
         Color:
             rgba: 1, 1, 1, 0.3
         Line:
@@ -159,7 +202,6 @@
 
     canvas.before:
         Color:
-            # If selected: Greenish tint. If not: Transparent.
             rgba: (0.4, 0.8, 0.4, 0.4) if self.is_selected else (0, 0, 0, 0)
         RoundedRectangle:
             pos: self.pos

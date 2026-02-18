@@ -3,7 +3,7 @@ import sounddevice as sd
 import queue
 import json
 
-MODEL_PATH = "vosk-model-small-en-us-0.15"
+MODEL_PATH = "../vosk-model-small-en-us-0.15"
 SAMPLE_RATE = 16000
 activate_word = "hey sent" # make activation word shorter for better recognition
 
