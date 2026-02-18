@@ -20,7 +20,7 @@ def execute_voice_command(command):
             print("Alarm is not active.")
         # Add logic to stop the alarm
     elif command == "DEACTIVATE_LISTENING":
-        print("Sentinel is no longer listening. Say \'Hey Sentinel\' to activate again.\n")
+        print("Sentinel is no longer listening. Say \'Hey Sent\' to activate again.\n")
         # Add logic to deactivate listening
         # Add flags as needed
     elif command == "SHUT_DOWN_DEVICE":

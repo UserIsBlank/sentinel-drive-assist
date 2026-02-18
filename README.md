@@ -59,7 +59,8 @@ Describe what software and libraries you will need to install in order to build 
 Remember: git-lfs is a dependency that developers will need to resolve before they can get started with a repo using LFS.
 
 ```
-Examples should be included
+Voice Activation:
+To use the offline voice activation feature, download the Vosk "vosk-model-small-en-us-0.15" model found at this link: https://github.com/alphacep/vosk-space/blob/master/models.md
 ```
 
 ## Getting the Source
