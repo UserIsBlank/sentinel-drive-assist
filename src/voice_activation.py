@@ -68,6 +68,11 @@ def voice_activate(command): #argument is a function in main program to execute 
                         if activate_word in audio_text:
                             is_active = True
                             print("Sentinel is now listening.")
+                            # notify main program to show mic popup (listening)
+                            try:
+                                command('VOICE_ACTIVATED')
+                            except Exception as e:
+                                print("Activation callback error:", e)
                         else:
                             print("Sentinel is waiting for activation word.")
                         continue

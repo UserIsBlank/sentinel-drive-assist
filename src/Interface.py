@@ -13,6 +13,9 @@ from kivy.uix.label import Label
 from kivy.uix.button import Button
 from kivy.event import EventDispatcher
 from kivy.clock import mainthread
+from kivy.uix.image import Image
+from kivy.animation import Animation
+from kivy.metrics import dp
 import os
 
 kivy.require('1.11.1')
@@ -58,7 +61,7 @@ class AudioManager(EventDispatcher):
         self.volume_level = value_0_to_100 / 100.0
         self._apply_volume()
 
-    def toggle_mute(self):
+    def toggle_mute(self): 
         self.is_muted = not self.is_muted
         self._apply_volume()
 
@@ -170,7 +173,50 @@ class SentinelApp(App):
             self.detection_active = True if saved_detection == 'True' else False
 
             Builder.load_file('interface.kv')
+
+            self.voice_popup = None # voice command popup reference
+            self.voice_image = None # voice command image reference
+            self.voice_animation = None # voice command animation reference (pulse effect)
             return Interface()
+        
+        @mainthread # show mic popup to indicate voice activation is active
+        def show_voice_popup(self):
+            if getattr(self, 'voice_popup', None):
+                return  # don't make duplicate
+            
+            mic_img_path = os.path.join(os.path.dirname(__file__), '../icons/microphone.png')
+            base_size = dp(100) # base size for the mic image
+            # add image as indicator instead of full popup (more subtle)
+            self.voice_image = Image(source=mic_img_path, size_hint=(None, None), size=(base_size, base_size), 
+                                     pos_hint={'center_x': 0.5, 'center_y': 0.3}, allow_stretch=True)
+            if getattr(self, 'root', None): 
+                self.root.add_widget(self.voice_image) # add mic image to main interface as indicator
+            
+            # create pulse animation (loop growing and shrinking)
+            grow_size = (dp(116), dp(116)) # size when pulsing out
+            shrink_size = (base_size, base_size) # original size to pulse back to
+            anim = (Animation(size=grow_size, opacity=0.85, duration=0.6) +
+                    Animation(size=shrink_size, opacity=1.0, duration=0.6))
+            self.voice_animation = anim
+            anim.repeat = True # loop animation indefinitely
+            anim.start(self.voice_image) # start animation
+
+        @mainthread
+        def hide_voice_popup(self):
+            if getattr(self, 'voice_image', None):
+                try:
+                    if getattr(self, 'root', None) and self.voice_image in self.root.children:
+                        self.root.remove_widget(self.voice_image) # remove mic image indicator
+                except Exception as e:
+                    pass
+                self.voice_image = None
+            
+            if getattr(self, 'voice_animation', None) and getattr(self, 'voice_image', None):
+                try:
+                    self.voice_animation.cancel(self.voice_image) # stop animation if it's still running
+                except Exception:
+                    pass
+                self.voice_animation = None
 
         def set_volume(self, value_0_to_100):
             self.audio_manager.apply_volume(value_0_to_100)
