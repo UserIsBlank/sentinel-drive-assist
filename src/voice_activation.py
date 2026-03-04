@@ -2,10 +2,13 @@ from vosk import Model, KaldiRecognizer # add vosk import for offline model
 import sounddevice as sd
 import queue
 import json
+import time # add time import for inactivity timeout
 
 MODEL_PATH = "../vosk-model-small-en-us-0.15"
 SAMPLE_RATE = 16000
 activate_word = "hey sent" # make activation word shorter for better recognition
+
+ACTIVE_TIMEOUT = 10 # auto-deactivate listening after 10 seconds of inactivity
 
 # possible commands dictionary:
 VOICE_COMMANDS = {
@@ -31,6 +34,7 @@ VOICE_COMMANDS = {
 
 def voice_activate(command): #argument is a function in main program to execute commands
     is_active = False # sentinel's default setting is inactive (not listening)
+    last_active_time = None # track last time a command was recognized
 
     # restrict Vosk to only listen for phrases specified (ignore random noise/speech)
     phrases = [activate_word] + list(VOICE_COMMANDS.keys())
@@ -52,7 +56,21 @@ def voice_activate(command): #argument is a function in main program to execute 
     with sd.RawInputStream(samplerate=SAMPLE_RATE, blocksize = 8000, dtype='int16', channels=1, callback=audio_callback):
         while True:
             try:
-                data = q.get() # get audio data from queue
+                try:
+                    data = q.get(timeout=0.25 if is_active else None) # use short timeout to check for inactivity when active 
+                except queue.Empty:
+                    # no audio received in last 0.25 s (check timeout)
+                    if is_active and last_active_time is not None:
+                        if (time.time() - last_active_time) >= ACTIVE_TIMEOUT:
+                            is_active = False
+                            last_active_time = None
+                            print("Auto-deactivated due to inactivity.")
+                            try:
+                                command('DEACTIVATE_LISTENING') # notify main program to stop listening and hide mic popup
+                            except Exception as e:
+                                print("Auto-deactivation callback error:", e)
+                    continue
+
                 # feed audio block to recognizer
                 if rec.AcceptWaveform(data): # becomes true once complete phrase is recognized
                     result = rec.Result()
@@ -67,11 +85,19 @@ def voice_activate(command): #argument is a function in main program to execute 
                     if not is_active:
                         if activate_word in audio_text:
                             is_active = True
+                            last_active_time = time.time() # reset inactivity timer
                             print("Sentinel is now listening.")
+                            # notify main program to show mic popup (listening)
+                            try:
+                                command('VOICE_ACTIVATED')
+                            except Exception as e:
+                                print("Activation callback error:", e)
                         else:
                             print("Sentinel is waiting for activation word.")
                         continue
-                        
+
+                    last_active_time = time.time() # reset inactivity timer on any recognized command
+                            
                     # active mode: "hey sentinel" has been said (can say commands)
                     match_input = None
                     for phrase, cmd in VOICE_COMMANDS.items():

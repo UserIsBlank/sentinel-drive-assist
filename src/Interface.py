@@ -13,6 +13,12 @@ from kivy.uix.label import Label
 from kivy.uix.button import Button
 from kivy.event import EventDispatcher
 from kivy.clock import mainthread
+from kivy.uix.image import Image
+from kivy.animation import Animation
+from kivy.metrics import dp
+from kivy.clock import Clock
+from kivy.uix.modalview import ModalView
+import random
 import os
 
 kivy.require('1.11.1')
@@ -58,7 +64,7 @@ class AudioManager(EventDispatcher):
         self.volume_level = value_0_to_100 / 100.0
         self._apply_volume()
 
-    def toggle_mute(self):
+    def toggle_mute(self): 
         self.is_muted = not self.is_muted
         self._apply_volume()
 
@@ -143,7 +149,6 @@ class Interface(FloatLayout):
         if app and app.audio_manager:
             app.audio_manager.stop_track()
 
-
 class SentinelApp(App):
         audio_manager = ObjectProperty(None)
         detection_active = BooleanProperty(False)
@@ -170,7 +175,59 @@ class SentinelApp(App):
             self.detection_active = True if saved_detection == 'True' else False
 
             Builder.load_file('interface.kv')
+
+            self.voice_popup = None # voice command popup reference
+            self.voice_image = None # voice command image reference
+            self.voice_animation = None # voice command animation reference (pulse effect)
+            self.message_library = ["Did you know? Drowsy driving is as dangerous as drunk driving.",
+                                    "Take a brake! Get some rest and fuel up!",
+                                    "Did you know? Yawning is a common sign of drowsiness.",
+                                    "Stay alert, stay safe!",
+                                    "Did you know? Drowsy driving causes around 100,000 crashes each year in the US.",
+                                    "Remember: Your safety is worth the stop!",
+                                    "Feeling tire-d? Pull over for a quick nap!",
+                                    "Did you know? Drowsy driving accounts for roughly 20% of all fatal car accidents.",
+                                    "Did you know? Drivers under 25 years old are more likely to be involved in drowsy driving crashes."]
             return Interface()
+        
+        @mainthread # show mic popup to indicate voice activation is active
+        def show_voice_popup(self):
+            if getattr(self, 'voice_popup', None):
+                return  # don't make duplicate
+            
+            mic_img_path = os.path.join(os.path.dirname(__file__), '../icons/microphone.png')
+            base_size = dp(100) # base size for the mic image
+            # add image as indicator instead of full popup (more subtle)
+            self.voice_image = Image(source=mic_img_path, size_hint=(None, None), size=(base_size, base_size), 
+                                     pos_hint={'center_x': 0.5, 'center_y': 0.3}, allow_stretch=True)
+            if getattr(self, 'root', None): 
+                self.root.add_widget(self.voice_image) # add mic image to main interface as indicator
+            
+            # create pulse animation (loop growing and shrinking)
+            grow_size = (dp(116), dp(116)) # size when pulsing out
+            shrink_size = (base_size, base_size) # original size to pulse back to
+            anim = (Animation(size=grow_size, opacity=0.85, duration=0.6) +
+                    Animation(size=shrink_size, opacity=1.0, duration=0.6))
+            self.voice_animation = anim
+            anim.repeat = True # loop animation indefinitely
+            anim.start(self.voice_image) # start animation
+
+        @mainthread
+        def hide_voice_popup(self):
+            if getattr(self, 'voice_image', None):
+                try:
+                    if getattr(self, 'root', None) and self.voice_image in self.root.children:
+                        self.root.remove_widget(self.voice_image) # remove mic image indicator
+                except Exception as e:
+                    pass
+                self.voice_image = None
+            
+            if getattr(self, 'voice_animation', None) and getattr(self, 'voice_image', None):
+                try:
+                    self.voice_animation.cancel(self.voice_image) # stop animation if it's still running
+                except Exception:
+                    pass
+                self.voice_animation = None
 
         def set_volume(self, value_0_to_100):
             self.audio_manager.apply_volume(value_0_to_100)
@@ -179,6 +236,8 @@ class SentinelApp(App):
             self.detection_active = not self.detection_active
             self.config.set('System', 'drowsiness_detection', str(self.detection_active))
             self.config.write()
+            if not self.detection_active:
+                self.show_message_overlay()
             print(f"[System] Drowsiness Detection: {'Enabled' if self.detection_active else 'Disabled'}")
 
         @mainthread
@@ -186,3 +245,68 @@ class SentinelApp(App):
             if self.audio_manager:
                 print("[System] Fail-safe triggered via Voice Command!")
                 self.audio_manager.stop_track()
+        
+        @mainthread
+        def show_message_overlay(self):
+            # avoid duplicates
+            if getattr(self, 'message_overlay', None):
+                return
+            
+            # random message from library or default
+            message = random.choice(self.message_library) if getattr(self, 'message_library', None) else "Stay alert!"
+            
+            # full-screen semi-transparent overlay
+            mv = ModalView(size_hint=(1,1), auto_dismiss=False, background_color=(0, 0, 0, 0.75))
+
+            # add message w/ gif as a vertical box layout
+            content = BoxLayout(orientation='vertical', 
+                                spacing = dp(8),
+                                padding=dp(16),
+                                size_hint=(None, None),
+                                size=(dp(400), dp(360)),
+                                pos_hint={'center_x': 0.5, 'center_y': 0.5})
+
+            label = Label(
+                text=message,
+                font_name='SentinelFont' if 'SentinelFont' in LabelBase._fonts else None,
+                font_size='24sp',
+                halign='center',
+                valign='middle',
+            )
+            label.bind(size=label.setter('text_size')) # make text wrap within label bounds
+
+            # create gif path
+            gif_path = os.path.join(os.path.dirname(__file__), '../icons/drivinggif.gif')
+            gif = Image(source=gif_path, allow_stretch=True, keep_ratio=True, size_hint=(1, None), height=dp(160)) # insert gif below text
+
+            # add widgets to layout
+            content.add_widget(label)
+            content.add_widget(gif)
+
+            mv.add_widget(content)
+            mv.opacity = 0.0 # start invisible to fade in
+            self.message_overlay = mv
+            mv.open()
+
+            # fade in
+            anim_in = Animation(opacity=1.0, duration=0.6)
+            anim_in.start(mv)
+
+            # play celebration sound when showing message
+            celebration_sound_path = os.path.join(os.path.dirname(__file__), '../audio/celebration.mp3')
+            if getattr(self, 'audio_manager', None):
+                self.audio_manager.play_track(celebration_sound_path)
+
+            # schedule fade out after 10 seconds
+            def _fade_out(dt):
+                anim_out = Animation(opacity=0.0, duration=0.6)
+                def _on_complete(animation, widget): # after fade out, dismiss and clean up reference
+                    try:
+                        widget.dismiss()
+                    except Exception:
+                        pass
+                    self.message_overlay = None
+                anim_out.bind(on_complete=_on_complete)
+                anim_out.start(mv)
+            Clock.schedule_once(_fade_out, 7)
+
