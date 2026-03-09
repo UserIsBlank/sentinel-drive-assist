@@ -1,3 +1,8 @@
 .idea
 Build
 .DS_Store
+
+# ignore vosk model files (download separately due to large size)
+vosk-model*/
+*.zip
+src/__pycache__
