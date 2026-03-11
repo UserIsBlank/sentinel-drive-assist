@@ -44,6 +44,8 @@ import collections
 import time
 import pathlib
 import urllib.request
+import json
+import threading
 
 # Config
 MODEL_PATH        = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models", "drowsiness_model.pkl")
@@ -86,6 +88,19 @@ ORANGE = (0, 140, 255)
 WHITE  = (255, 255, 255)
 BLACK  = (0, 0, 0)
 GREY   = (160, 160, 160)
+
+# alert callback (called when drowsiness is detected)
+def notify_drowsiness():
+    print("[DEBUG] notify_drowsiness() called")
+    def _post():
+        url = "http://127.0.0.1:5000/wake_up"
+        payload = json.dumps({"event": "WAKE_UP"}).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req, timeout=0.5)
+        except Exception:
+            pass
+    threading.Thread(target=_post, daemon=True).start()
 
 
 # Feature helpers
@@ -393,6 +408,8 @@ def main():
     cached_suppressed   = None
     cached_yawning      = False
 
+    alert_active = False # flag to track if alert is currently active (prevent multiple triggers)
+
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -507,6 +524,17 @@ def main():
                  drowsy_count, cached_state, fps,
                  baseline_ear, threshold, cached_suppressed,
                  cached_yawning, yawn_gate)
+        
+        # Wake up alert trigger
+        if drowsy_count >= ALERT_FRAMES:
+            if not alert_active:
+                print(f"[DEBUG] Triggering alarm — drowsy_count={drowsy_count}, alert_active={alert_active}")
+                notify_drowsiness()
+                alert_active = True
+        else:
+            if alert_active:
+                print(f"[DEBUG] Resetting alert — drowsy_count={drowsy_count}")
+            alert_active = False
 
         cv2.imshow("Sentinel Drive Assist (Pi)", frame)
         if cv2.waitKey(1) & 0xFF == ord("q"):
