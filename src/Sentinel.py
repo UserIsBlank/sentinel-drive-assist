@@ -31,6 +31,20 @@ def execute_voice_command(command):
             app.hide_voice_popup()
         # Add logic to deactivate listening
         # Add flags as needed
+    elif command == "DISABLE_DETECTION":
+        print("Disabling detection features.")
+        if app:
+            if getattr(app, 'detection_active', False): # check if detection is currently active before toggling
+                app.toggle_detection() # toggle detection off in UI)
+            else:
+                print("Detection is already disabled.")
+    elif command == "ENABLE_DETECTION":
+        print("Enabling detection features.")
+        if app:
+            if not getattr(app, 'detection_active', False): # check if detection is currently inactive before toggling
+                app.toggle_detection() # toggle detection on in UI
+            else:
+                print("Detection is already enabled.")
     elif command == "SHUT_DOWN_DEVICE":
         print("Shutting down Sentinel. Goodbye!")
         if app:
