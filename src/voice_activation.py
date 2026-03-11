@@ -26,6 +26,20 @@ VOICE_COMMANDS = {
     "stop listening": "DEACTIVATE_LISTENING",
     "sleep": "DEACTIVATE_LISTENING",
 
+    # disable detection commands
+    "disable detection": "DISABLE_DETECTION",
+    "stop detection": "DISABLE_DETECTION",
+    "turn off detection": "DISABLE_DETECTION",
+    "disable drowsiness detection": "DISABLE_DETECTION",
+    "turn off drowsiness detection": "DISABLE_DETECTION",
+
+    # enable detection commands
+    "enable detection": "ENABLE_DETECTION",
+    "start detection": "ENABLE_DETECTION",
+    "turn on detection": "ENABLE_DETECTION",
+    "enable drowsiness detection": "ENABLE_DETECTION",
+    "turn on drowsiness detection": "ENABLE_DETECTION",
+    
     # shut down device commands
     "shut down": "SHUT_DOWN_DEVICE",
     "power off": "SHUT_DOWN_DEVICE",

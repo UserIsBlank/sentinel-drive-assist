@@ -236,8 +236,17 @@ class SentinelApp(App):
             self.detection_active = not self.detection_active
             self.config.set('System', 'drowsiness_detection', str(self.detection_active))
             self.config.write()
-            if not self.detection_active:
+
+            # if detection is active, play alarm
+            if self.detection_active:
+                if getattr(self, 'audio_manager', None) and getattr(self.audio_manager, 'selected_file', None):
+                    print(f"[System] Playing Alarm: {self.audio_manager.selected_file}")
+                    self.audio_manager.play_track(self.audio_manager.selected_file)
+            # if detection is deactivated, stop alarm and show message overlay
+            else:
                 self.show_message_overlay()
+                if getattr(self, 'audio_manager', None): # stop alarm if it's currently playing
+                    self.audio_manager.stop_track()
             print(f"[System] Drowsiness Detection: {'Enabled' if self.detection_active else 'Disabled'}")
 
         @mainthread
