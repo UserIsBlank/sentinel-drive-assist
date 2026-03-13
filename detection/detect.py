@@ -50,18 +50,22 @@ MODEL_PATH        = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..
 FACE_MODEL_PATH   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models", "face_landmarker.task")
 CAPTURE_WIDTH     = 320
 CAPTURE_HEIGHT    = 240
-ALERT_FRAMES      = 36
-SMOOTHING_WINDOW  = 5
-PITCH_SUPPRESS    = 20.0
-YAW_SUPPRESS      = 25.0
-FRAME_SKIP        = 2
-THRESHOLD_FLOOR   = 0.50
-CALIBRATION_SECS  = 4
-EAR_DROP_RATIO        = 0.75
-EAR_CLOSED_OVERRIDE   = 0.55
-MAR_YAWN_RATIO    = 1.60
-YAWN_COUNT_WEIGHT = 2
-DEBUG             = False
+
+PITCH_SUPPRESS       = 20.0
+YAW_SUPPRESS         = 25.0
+FRAME_SKIP           = 2
+THRESHOLD_FLOOR      = 0.50
+CALIBRATION_SECS     = 4
+EAR_DROP_RATIO       = 0.75
+EAR_CLOSED_OVERRIDE  = 0.55
+MAR_YAWN_RATIO       = 1.60
+YAWN_COUNT_WEIGHT    = 2
+DEBUG                = False
+
+ALERT_FRAMES      = 0
+SMOOTHING_WINDOW  = 0
+FRAME_SKIP        = 0
+EAR_DROP_RATIO    = 0
 
 # Landmark indices
 LEFT_EYE    = [362, 385, 387, 263, 373, 380]
@@ -87,6 +91,19 @@ WHITE  = (255, 255, 255)
 BLACK  = (0, 0, 0)
 GREY   = (160, 160, 160)
 
+PRESETS = {
+    "adjusted": {"alert_frames": 20, "smoothing_window": 3, "frame_skip": 2, "ear_drop_ratio": 0.75},
+    "aggressive": {"alert_frames": 10, "smoothing_window": 2,"frame_skip": 2, "ear_drop_ratio": 0.75},
+    "conservative": {"alert_frames": 30, "smoothing_window": 5,"frame_skip": 3, "ear_drop_ratio": 0.80},
+}
+
+config = PRESETS["adjusted"].copy()
+
+def set_sensitivity(preset):
+    global config
+    if preset in PRESETS:
+        config.update(PRESETS[preset])
+        print(f"Sensitivity set to '{preset}': {config}")
 
 # Feature helpers
 def _lm_to_pts(landmarks, indices, w, h):
