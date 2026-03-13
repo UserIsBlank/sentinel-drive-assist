@@ -1,3 +1,5 @@
+import traceback
+
 import kivy
 from kivy.app import App
 from kivy.lang import Builder
@@ -40,6 +42,10 @@ class AudioManager(EventDispatcher):
     def play_track(self, path):
         if not path:
             return
+
+        import traceback
+        print("[Audio] play_track called from:")
+        traceback.print_stack()  # ← this will show exactly what called play_track
 
         self.stop_track()
 
@@ -136,9 +142,9 @@ class DetectionButton(ButtonBehavior, BoxLayout):
     def on_release(self):
         app = App.get_running_app()
         app.toggle_detection()
-        if app.detection_active and app.audio_manager.selected_file:
-            print(f"[System] Testing Alarm: {app.audio_manager.selected_file}")
-            app.audio_manager.play_track(app.audio_manager.selected_file)
+        # if app.detection_active and app.audio_manager.selected_file:
+        #     print(f"[System] Testing Alarm: {app.audio_manager.selected_file}")
+        #     app.audio_manager.play_track(app.audio_manager.selected_file)
 
 class Interface(FloatLayout):
     audio_manager = ObjectProperty(None)
@@ -238,12 +244,12 @@ class SentinelApp(App):
             self.config.write()
 
             # if detection is active, play alarm
-            if self.detection_active:
-                if getattr(self, 'audio_manager', None) and getattr(self.audio_manager, 'selected_file', None):
-                    print(f"[System] Playing Alarm: {self.audio_manager.selected_file}")
-                    self.audio_manager.play_track(self.audio_manager.selected_file)
+            # if self.detection_active:
+            #     if getattr(self, 'audio_manager', None) and getattr(self.audio_manager, 'selected_file', None):
+            #         print(f"[System] Playing Alarm: {self.audio_manager.selected_file}")
+            #         self.audio_manager.play_track(self.audio_manager.selected_file)
             # if detection is deactivated, stop alarm and show message overlay
-            else:
+            if not self.detection_active:
                 self.show_message_overlay()
                 if getattr(self, 'audio_manager', None): # stop alarm if it's currently playing
                     self.audio_manager.stop_track()
