@@ -1,4 +1,5 @@
 import traceback
+import sys
 
 import kivy
 from kivy.app import App
@@ -158,10 +159,11 @@ class Interface(FloatLayout):
 class SentinelApp(App):
         audio_manager = ObjectProperty(None)
         detection_active = BooleanProperty(False)
+        sensitivity = StringProperty('default')
 
         def build_config(self, config):
             config.setdefaults('Audio', {'default_sound': '../audio/alert1.mp3'})
-            config.setdefaults('System', {'drowsiness_detection': 'false'})
+            config.setdefaults('System', {'drowsiness_detection': 'false', 'sensitivity': 'default'})
 
         def build(self):
             self.audio_manager = AudioManager()
@@ -179,6 +181,13 @@ class SentinelApp(App):
 
             saved_detection = self.config.get('System', 'drowsiness_detection')
             self.detection_active = True if saved_detection == 'True' else False
+
+            saved_sensitivity = self.config.get('System', 'sensitivity')
+            self.sensitivity = saved_sensitivity
+            detect_module = sys.modules.get('detection.detect')
+            if detect_module:
+                detect_module.set_sensitivity(saved_sensitivity)
+            print(f"[System] Startup Sensitivity: {saved_sensitivity}")
 
             Builder.load_file('interface.kv')
 
@@ -254,6 +263,15 @@ class SentinelApp(App):
                 if getattr(self, 'audio_manager', None): # stop alarm if it's currently playing
                     self.audio_manager.stop_track()
             print(f"[System] Drowsiness Detection: {'Enabled' if self.detection_active else 'Disabled'}")
+
+        def set_sensitivity(self, preset):
+            detect_module = sys.modules.get('detection.detect')
+            if detect_module:
+                detect_module.set_sensitivity(preset)
+            self.sensitivity = preset
+            self.config.set('System', 'sensitivity', preset)
+            self.config.write()
+            print(f"[System] Sensitivity set to: {preset}")
 
         @mainthread
         def trigger_failsafe(self):

@@ -1,28 +1,34 @@
-from voice_activation import voice_activate
-from kivy.app import App
-from Interface import SentinelApp
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from kivy.clock import Clock
-import threading, json
-import os
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
-print('Welcome to Sentinel')
+import threading, json
+from kivy.app import App
+from kivy.clock import Clock
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+import detection.detect as detect
+from voice_activation import voice_activate
+from Interface import SentinelApp
 
 alarm_on = True  # alarm is default on -- update once connected to actual alarm
 alarm_playing = False # flag to track if alarm sound is currently playing (prevent multiple triggers)
 
 class _WakeUpHandler(BaseHTTPRequestHandler):
     def do_POST(self):
-        if self.path != "/wake_up":
-            self.send_response(404); self.end_headers(); return
         length = int(self.headers.get("content-length", 0))
         body = self.rfile.read(length) if length else b""
         try:
             data = json.loads(body.decode("utf-8") or "{}")
         except Exception:
             data = {}
-        Clock.schedule_once(lambda dt: _do_play(data), 0)
-        self.send_response(200); self.end_headers()
+        if self.path == "/wake_up":
+            Clock.schedule_once(lambda dt: _do_play(data), 0)
+            self.send_response(200); self.end_headers()
+        elif self.path == "/alert_cleared":
+            Clock.schedule_once(lambda dt: _do_stop(), 0)
+            self.send_response(200); self.end_headers()
+        else:
+            self.send_response(404); self.end_headers()
     def log_message(self, format, *args):
         return # suppress default logging
     
@@ -120,11 +126,28 @@ def execute_voice_command(command):
             app.stop()
         # Add logic to shut down the device
         # clean up resources
+    elif command in ("SENSITIVITY_CONSERVATIVE", "SENSITIVITY_DEFAULT", "SENSITIVITY_AGGRESSIVE"):
+        preset_map = {
+            "SENSITIVITY_CONSERVATIVE": "conservative",
+            "SENSITIVITY_DEFAULT":      "default",
+            "SENSITIVITY_AGGRESSIVE":   "aggressive",
+        }
+        preset = preset_map[command]
+        detect.set_sensitivity(preset)
+        if app and hasattr(app, 'set_sensitivity'):
+            Clock.schedule_once(lambda dt: app.set_sensitivity(preset), 0)
+    elif command == "RESET_ALERT":
+        print("Resetting drowsiness alert via voice command.")
+        detect.request_reset()
+        Clock.schedule_once(lambda dt: _do_stop(), 0)
 
 def start_voice_listening():
     voice_activate(execute_voice_command)
 
 if __name__ == "__main__":
+    print('Welcome to Sentinel')
+    detect_thread = threading.Thread(target=detect.main, daemon=True)
+    detect_thread.start()
     threading.Thread(target=_start_server, daemon=True).start() # start HTTP server in background thread
     voice_thread = threading.Thread(target=start_voice_listening, daemon=True)
     voice_thread.start()
