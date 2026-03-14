@@ -14,7 +14,7 @@
     BoxLayout:
         orientation: 'vertical'
         size_hint: None, None
-        size: "200dp", "350dp"
+        size: "200dp", "440dp"
         pos_hint: {'center_x': 0.25, 'center_y': 0.55}
         spacing: "20dp"
 
@@ -23,7 +23,44 @@
 
         FailSafeButton:
             size_hint: 1, 1
-            on_press: root.on_failsafe_press()
+            on_press: app.trigger_failsafe()
+
+        # Sensitivity Control
+        BoxLayout:
+            orientation: 'vertical'
+            size_hint: 1, None
+            height: "70dp"
+            spacing: "6dp"
+
+            Label:
+                text: "Sensitivity"
+                font_name: "SentinelFont"
+                font_size: '14sp'
+                size_hint_y: None
+                height: "18dp"
+                color: 1, 1, 1, 0.85
+
+            BoxLayout:
+                orientation: 'horizontal'
+                spacing: "4dp"
+
+                Button:
+                    text: "Low"
+                    font_size: '13sp'
+                    background_color: (0.4, 0.8, 0.4, 1) if app.sensitivity == 'conservative' else (0.4, 0.4, 0.55, 1)
+                    on_press: app.set_sensitivity('conservative')
+
+                Button:
+                    text: "Med"
+                    font_size: '13sp'
+                    background_color: (0.4, 0.8, 0.4, 1) if app.sensitivity == 'default' else (0.4, 0.4, 0.55, 1)
+                    on_press: app.set_sensitivity('default')
+
+                Button:
+                    text: "High"
+                    font_size: '13sp'
+                    background_color: (0.4, 0.8, 0.4, 1) if app.sensitivity == 'aggressive' else (0.4, 0.4, 0.55, 1)
+                    on_press: app.set_sensitivity('aggressive')
 
     BoxLayout:
         orientation: 'vertical'

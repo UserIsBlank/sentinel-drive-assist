@@ -1,3 +1,10 @@
+"""
+interface.py
+"""
+
+import traceback
+import sys
+
 import kivy
 from kivy.app import App
 from kivy.lang import Builder
@@ -20,10 +27,11 @@ from kivy.clock import Clock
 from kivy.uix.modalview import ModalView
 import random
 import os
+import threading
 
 kivy.require('1.11.1')
 
-# --- Configuration ---
+# Config
 Window.clearcolor = (0.427, 0.435, 0.478, 1)
 Window.size = (900, 550)
 
@@ -40,6 +48,10 @@ class AudioManager(EventDispatcher):
     def play_track(self, path):
         if not path:
             return
+
+        import traceback
+        print("[Audio] play_track called from:")
+        traceback.print_stack()
 
         self.stop_track()
 
@@ -136,26 +148,23 @@ class DetectionButton(ButtonBehavior, BoxLayout):
     def on_release(self):
         app = App.get_running_app()
         app.toggle_detection()
-        if app.detection_active and app.audio_manager.selected_file:
-            print(f"[System] Testing Alarm: {app.audio_manager.selected_file}")
-            app.audio_manager.play_track(app.audio_manager.selected_file)
 
 class Interface(FloatLayout):
     audio_manager = ObjectProperty(None)
 
-    def on_failsafe_press(self):
-        print("Fail-safe activated!")
-        app = App.get_running_app()
-        if app and app.audio_manager:
-            app.audio_manager.stop_track()
 
 class SentinelApp(App):
         audio_manager = ObjectProperty(None)
         detection_active = BooleanProperty(False)
+        sensitivity = StringProperty('default')
+
+        def on_stop(self):
+            import os, signal
+            os.kill(os.getpid(), signal.SIGTERM)
 
         def build_config(self, config):
             config.setdefaults('Audio', {'default_sound': '../audio/alert1.mp3'})
-            config.setdefaults('System', {'drowsiness_detection': 'false'})
+            config.setdefaults('System', {'drowsiness_detection': 'True', 'sensitivity': 'default'})
 
         def build(self):
             self.audio_manager = AudioManager()
@@ -173,12 +182,22 @@ class SentinelApp(App):
 
             saved_detection = self.config.get('System', 'drowsiness_detection')
             self.detection_active = True if saved_detection == 'True' else False
+            detect_module = sys.modules.get('detection.detect')
+            if detect_module:
+                detect_module.set_detection_enabled(self.detection_active)
+
+            saved_sensitivity = self.config.get('System', 'sensitivity')
+            self.sensitivity = saved_sensitivity
+            detect_module = sys.modules.get('detection.detect')
+            if detect_module:
+                detect_module.set_sensitivity(saved_sensitivity)
+            print(f"[System] Startup Sensitivity: {saved_sensitivity}")
 
             Builder.load_file('interface.kv')
 
             self.voice_popup = None # voice command popup reference
             self.voice_image = None # voice command image reference
-            self.voice_animation = None # voice command animation reference (pulse effect)
+            self.voice_animation = None # voice command animation reference
             self.message_library = ["Did you know? Drowsy driving is as dangerous as drunk driving.",
                                     "Take a brake! Get some rest and fuel up!",
                                     "Did you know? Yawning is a common sign of drowsiness.",
@@ -190,34 +209,32 @@ class SentinelApp(App):
                                     "Did you know? Drivers under 25 years old are more likely to be involved in drowsy driving crashes."]
             return Interface()
         
-        @mainthread # show mic popup to indicate voice activation is active
+        @mainthread
         def show_voice_popup(self):
             if getattr(self, 'voice_popup', None):
-                return  # don't make duplicate
+                return
             
             mic_img_path = os.path.join(os.path.dirname(__file__), '../icons/microphone.png')
-            base_size = dp(100) # base size for the mic image
-            # add image as indicator instead of full popup (more subtle)
+            base_size = dp(100)
             self.voice_image = Image(source=mic_img_path, size_hint=(None, None), size=(base_size, base_size), 
                                      pos_hint={'center_x': 0.5, 'center_y': 0.3}, allow_stretch=True)
             if getattr(self, 'root', None): 
-                self.root.add_widget(self.voice_image) # add mic image to main interface as indicator
+                self.root.add_widget(self.voice_image)
             
-            # create pulse animation (loop growing and shrinking)
-            grow_size = (dp(116), dp(116)) # size when pulsing out
-            shrink_size = (base_size, base_size) # original size to pulse back to
+            grow_size = (dp(116), dp(116))
+            shrink_size = (base_size, base_size)
             anim = (Animation(size=grow_size, opacity=0.85, duration=0.6) +
                     Animation(size=shrink_size, opacity=1.0, duration=0.6))
             self.voice_animation = anim
-            anim.repeat = True # loop animation indefinitely
-            anim.start(self.voice_image) # start animation
+            anim.repeat = True
+            anim.start(self.voice_image)
 
         @mainthread
         def hide_voice_popup(self):
             if getattr(self, 'voice_image', None):
                 try:
                     if getattr(self, 'root', None) and self.voice_image in self.root.children:
-                        self.root.remove_widget(self.voice_image) # remove mic image indicator
+                        self.root.remove_widget(self.voice_image)
                 except Exception as e:
                     pass
                 self.voice_image = None
@@ -236,24 +253,43 @@ class SentinelApp(App):
             self.detection_active = not self.detection_active
             self.config.set('System', 'drowsiness_detection', str(self.detection_active))
             self.config.write()
-
-            # if detection is active, play alarm
-            if self.detection_active:
-                if getattr(self, 'audio_manager', None) and getattr(self.audio_manager, 'selected_file', None):
-                    print(f"[System] Playing Alarm: {self.audio_manager.selected_file}")
-                    self.audio_manager.play_track(self.audio_manager.selected_file)
-            # if detection is deactivated, stop alarm and show message overlay
-            else:
+            detect_module = sys.modules.get('detection.detect')
+            if detect_module:
+                detect_module.set_detection_enabled(self.detection_active)
+            if not self.detection_active:
                 self.show_message_overlay()
                 if getattr(self, 'audio_manager', None): # stop alarm if it's currently playing
                     self.audio_manager.stop_track()
             print(f"[System] Drowsiness Detection: {'Enabled' if self.detection_active else 'Disabled'}")
 
+        def set_sensitivity(self, preset):
+            detect_module = sys.modules.get('detection.detect')
+            if detect_module:
+                detect_module.set_sensitivity(preset)
+            self.sensitivity = preset
+            self.config.set('System', 'sensitivity', preset)
+            self.config.write()
+            print(f"[System] Sensitivity set to: {preset}")
+
         @mainthread
         def trigger_failsafe(self):
             if self.audio_manager:
                 print("[System] Fail-safe triggered via Voice Command!")
-                self.audio_manager.stop_track()
+
+                # make sure that the alarm doesn't permanently stop after pressing failsafe
+                # POST request to _do_stop() so it can reset alarm_playing flag to false
+                def _post():
+                    import urllib.request
+                    req = urllib.request.Request(
+                        "http://127.0.0.1:5000/alert_cleared", # endpoint
+                        data=b"{}",
+                        headers={"Content-Type": "application/json"}
+                    )
+                    try:
+                        urllib.request.urlopen(req, timeout=0.5)
+                    except Exception:
+                        pass
+                threading.Thread(target=_post, daemon=True).start()
         
         @mainthread
         def show_message_overlay(self):
