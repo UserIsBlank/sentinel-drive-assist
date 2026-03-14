@@ -15,6 +15,7 @@ lighting, and camera angle between users.
 """
 
 import os
+os.environ.setdefault('QT_QPA_PLATFORM', 'xcb')
 import cv2
 import numpy as np
 import joblib
@@ -451,7 +452,14 @@ def main(headless=False):
             break
 
         if not _detection_enabled:
-            time.sleep(0.05)
+            if not headless:
+                cv2.putText(frame, "DETECTION DISABLED", (10, frame.shape[0] // 2),
+                            cv2.FONT_HERSHEY_DUPLEX, 0.7, (0, 140, 255), 2)
+                cv2.imshow("Sentinel Drive Assist (Pi)", frame)
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    break
+            else:
+                time.sleep(0.05)
             continue
 
         h, w          = frame.shape[:2]
