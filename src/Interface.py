@@ -158,7 +158,7 @@ class SentinelApp(App):
         sensitivity = StringProperty('default')
 
         def build_config(self, config):
-            config.setdefaults('Audio', {'default_sound': '../audio/alert1.wav'})
+            config.setdefaults('Audio', {'default_sound': '../audio/alert1.mp3'})
             config.setdefaults('System', {'drowsiness_detection': 'false', 'sensitivity': 'default'})
 
         def build(self):
@@ -168,7 +168,7 @@ class SentinelApp(App):
 
             if not saved_sound or saved_sound == 'None':
                 print("[System] Config was empty. Resetting to default.")
-                saved_sound = '../audio/alert1.wav'
+                saved_sound = '../audio/alert1.mp3'
                 self.config.set('Audio', 'default_sound', saved_sound)
                 self.config.write()
 
