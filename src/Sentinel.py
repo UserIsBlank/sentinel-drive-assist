@@ -142,9 +142,15 @@ def start_voice_listening():
     voice_activate(execute_voice_command)
 
 if __name__ == "__main__":
+    # print('Welcome to Sentinel')
+    # detect_thread = threading.Thread(target=run_detection, daemon=True)
+    # detect_thread.start()
+    # threading.Thread(target=_start_server, daemon=True).start()
+    # voice_thread = threading.Thread(target=start_voice_listening, daemon=True)
+    # voice_thread.start()
+    # SentinelApp().run()
+
     print('Welcome to Sentinel')
-    detect_thread = threading.Thread(target=run_detection, daemon=True)
-    detect_thread.start()
     threading.Thread(target=_start_server, daemon=True).start()
     voice_thread = threading.Thread(target=start_voice_listening, daemon=True)
     voice_thread.start()

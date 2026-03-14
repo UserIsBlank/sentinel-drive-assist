@@ -162,6 +162,12 @@ class SentinelApp(App):
             import os, signal
             os.kill(os.getpid(), signal.SIGTERM)
 
+        def on_start(self):
+            import threading
+            import detection.detect as detect
+            threading.Thread(target=lambda: detect.main(headless=True), daemon=True).start()
+            print("[System] Detection thread started")
+
         def build_config(self, config):
             config.setdefaults('Audio', {'default_sound': '../audio/alert1.mp3'})
             config.setdefaults('System', {'drowsiness_detection': 'True', 'sensitivity': 'default'})

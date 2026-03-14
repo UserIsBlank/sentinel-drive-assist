@@ -330,6 +330,8 @@ def build_face_landmarker():
 
 def main(headless=False):
     print("Loading model...")
+    time.sleep(2) # wait for Kivy to finish initializing
+
     obj = joblib.load(MODEL_PATH)
     if isinstance(obj, dict):
         pipeline  = obj["pipeline"]
