@@ -23,6 +23,7 @@ from kivy.clock import Clock
 from kivy.uix.modalview import ModalView
 import random
 import os
+import threading
 
 kivy.require('1.11.1')
 
@@ -150,11 +151,6 @@ class DetectionButton(ButtonBehavior, BoxLayout):
 class Interface(FloatLayout):
     audio_manager = ObjectProperty(None)
 
-    def on_failsafe_press(self):
-        print("Fail-safe activated!")
-        app = App.get_running_app()
-        if app and app.audio_manager:
-            app.audio_manager.stop_track()
 
 class SentinelApp(App):
         audio_manager = ObjectProperty(None)
@@ -162,7 +158,7 @@ class SentinelApp(App):
         sensitivity = StringProperty('default')
 
         def build_config(self, config):
-            config.setdefaults('Audio', {'default_sound': '../audio/alert1.mp3'})
+            config.setdefaults('Audio', {'default_sound': '../audio/alert1.wav'})
             config.setdefaults('System', {'drowsiness_detection': 'false', 'sensitivity': 'default'})
 
         def build(self):
@@ -172,7 +168,7 @@ class SentinelApp(App):
 
             if not saved_sound or saved_sound == 'None':
                 print("[System] Config was empty. Resetting to default.")
-                saved_sound = '../audio/alert1.mp3'
+                saved_sound = '../audio/alert1.wav'
                 self.config.set('Audio', 'default_sound', saved_sound)
                 self.config.write()
 
@@ -277,7 +273,21 @@ class SentinelApp(App):
         def trigger_failsafe(self):
             if self.audio_manager:
                 print("[System] Fail-safe triggered via Voice Command!")
-                self.audio_manager.stop_track()
+
+                # make sure that the alarm doesn't permanently stop after pressing failsafe
+                # POST request to _do_stop() so it can reset alarm_playing flag to false
+                def _post():
+                    import urllib.request
+                    req = urllib.request.Request(
+                        "http://127.0.0.1:5000/alert_cleared", # endpoint
+                        data=b"{}",
+                        headers={"Content-Type": "application/json"}
+                    )
+                    try:
+                        urllib.request.urlopen(req, timeout=0.5)
+                    except Exception:
+                        pass
+                threading.Thread(target=_post, daemon=True).start()
         
         @mainthread
         def show_message_overlay(self):

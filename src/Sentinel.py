@@ -10,7 +10,6 @@ import detection.detect as detect
 from voice_activation import voice_activate
 from Interface import SentinelApp
 
-alarm_on = True  # alarm is default on -- update once connected to actual alarm
 alarm_playing = False # flag to track if alarm sound is currently playing (prevent multiple triggers)
 
 class _WakeUpHandler(BaseHTTPRequestHandler):
@@ -35,11 +34,8 @@ class _WakeUpHandler(BaseHTTPRequestHandler):
 # start HTTP server for wake-up calls from detection module
 def _do_play(data):
     global alarm_playing
-    print("[Sentinel] _do_play called, alarm_on=", alarm_on, "alarm_playing=", alarm_playing)
+    print("[Sentinel] _do_play called, alarm_playing=", alarm_playing)
 
-    if not alarm_on:
-        print("[Sentinel] alarm_on is False, returning")
-        return
     if alarm_playing:
         print("[Sentinel] alarm_playing is True, returning")
         return
@@ -68,7 +64,7 @@ def _do_play(data):
 # connect stopping track to detect.py's failsafe trigger
 def _do_stop():
     global alarm_playing
-    alarm_playing = False
+    alarm_playing = False # reset flag to let future alarms play
     app = App.get_running_app()
     if not app:
         return
@@ -80,7 +76,6 @@ def _start_server():
     server.serve_forever()
 
 def execute_voice_command(command):
-    global alarm_on
     app = App.get_running_app()
     # show UI indicator
     if command == "VOICE_ACTIVATED":
@@ -90,20 +85,12 @@ def execute_voice_command(command):
     if command == "STOP_ALARM":
         if app:
             app.trigger_failsafe()
-        Clock.schedule_once(lambda dt: _do_stop(), 0)
-        if alarm_on:
-            print("Stopping Alarm")
-            alarm_on = False
-        else:
-            print("Alarm is not active.")
-        # Add logic to stop the alarm
+        Clock.schedule_once(lambda dt: _do_stop(), 0) # make sure alarm_playing flag is set to false
     elif command == "DEACTIVATE_LISTENING":
         print("Sentinel is no longer listening. Say \'Hey Sent\' to activate again.\n")
         # hide UI indicator
         if app and hasattr(app, 'hide_voice_popup'):
             app.hide_voice_popup()
-        # Add logic to deactivate listening
-        # Add flags as needed
     elif command == "DISABLE_DETECTION":
         print("Disabling detection features.")
         if app:
@@ -124,8 +111,6 @@ def execute_voice_command(command):
             if hasattr(app, 'hide_voice_popup'): # hide voice popup when shutting down
                 app.hide_voice_popup()
             app.stop()
-        # Add logic to shut down the device
-        # clean up resources
     elif command in ("SENSITIVITY_CONSERVATIVE", "SENSITIVITY_DEFAULT", "SENSITIVITY_AGGRESSIVE"):
         preset_map = {
             "SENSITIVITY_CONSERVATIVE": "conservative",
@@ -146,7 +131,7 @@ def start_voice_listening():
 
 if __name__ == "__main__":
     print('Welcome to Sentinel')
-    detect_thread = threading.Thread(target=detect.main, daemon=True)
+    detect_thread = threading.Thread(target=lambda: detect.main(headless=True), daemon=True) # run detection in background thread with headless=True to disable OpenCV windows
     detect_thread.start()
     threading.Thread(target=_start_server, daemon=True).start() # start HTTP server in background thread
     voice_thread = threading.Thread(target=start_voice_listening, daemon=True)

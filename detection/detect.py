@@ -338,7 +338,7 @@ def build_face_landmarker():
     )
     return mp_vision.FaceLandmarker.create_from_options(opts)
 
-def main():
+def main(headless=False):
     set_sensitivity("default")
     print("Loading model...")
     obj = joblib.load(MODEL_PATH)
@@ -398,12 +398,14 @@ def main():
         cal_frame_idx += 1
         draw_calibration_screen(frame, elapsed, CALIBRATION_SECS,
                                 cal_ear_samples, w, h)
-        cv2.imshow("Sentinel Drive Assist (Pi)", frame)
-        if cv2.waitKey(1) & 0xFF == ord("q"):
-            cap.release()
-            face_landmarker.close()
-            cv2.destroyAllWindows()
-            return
+        # show calibration screen when in headless mode
+        if not headless:
+            cv2.imshow("Sentinel Drive Assist (Pi)", frame)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                cap.release()
+                face_landmarker.close()
+                cv2.destroyAllWindows()
+                return
 
     POPULATION_EAR_MEAN = 0.28
     POPULATION_MAR_MEAN = 0.45
@@ -589,9 +591,10 @@ def main():
                 notify_alert_cleared()
             alert_active = False
 
-        cv2.imshow("Sentinel Drive Assist (Pi)", frame)
-        if cv2.waitKey(1) & 0xFF == ord("q"):
-            break
+        if not headless:
+            cv2.imshow("Sentinel Drive Assist (Pi)", frame)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
 
     cap.release()
     face_landmarker.close()

@@ -6,3 +6,4 @@ Build
 vosk-model*/
 *.zip
 src/__pycache__
+audio/alert1.wav
