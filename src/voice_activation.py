@@ -1,3 +1,7 @@
+"""
+voice_activation.py
+"""
+
 from vosk import Model, KaldiRecognizer # add vosk import for offline model
 import sounddevice as sd
 import queue

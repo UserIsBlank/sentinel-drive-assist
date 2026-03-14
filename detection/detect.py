@@ -8,28 +8,10 @@ Loads drowsiness_model.pkl produced by train.py, opens the webcam,
 and continuously classifies the driver as AWAKE, DROWSY, LOOKING DOWN, or
 HEAD TURNED. Triggers a visual WAKE UP alert after sustained drowsiness.
 
-Detection is based on 7 facial geometry features extracted each frame via
-MediaPipe FaceLandmarker:
-  - Eye Aspect Ratio (EAR) — left, right, mean, asymmetry, minimum
-  - Mouth Aspect Ratio (MAR) — detects yawning independently of eye closure
-  - EAR/MAR ratio
-
 On startup, a 4-second calibration phase measures the user's personal
 awake EAR and MAR baseline. Features are shifted relative to this baseline
 before each model call, compensating for natural variation in eye shape,
 lighting, and camera angle between users.
-
-Drowsiness is detected via two independent paths:
-  1. Eye closure  - model is called when EAR drops below 75% of baseline
-                    and head pose is stable
-  2. Yawning      - MAR exceeding 160% of baseline directly increments
-                    the drowsy counter regardless of eye state
-
-Head pose (pitch/yaw via solvePnP) is used only for suppression:
-  - Pitch > 20 degrees  -> LOOKING DOWN  (suppress false positives)
-  - Yaw   > 25 degrees  -> HEAD TURNED   (suppress false positives)
-  Suppression is overridden if EAR drops below 55% of baseline, since
-  closed eyes corrupt landmark geometry and produce unreliable pose.
 """
 
 import os
@@ -64,10 +46,10 @@ YAWN_COUNT_WEIGHT    = 2
 RECOVERY_SECS        = 1
 DEBUG                = False
 
-ALERT_FRAMES      = 0
-SMOOTHING_WINDOW  = 0
-FRAME_SKIP        = 0
-EAR_DROP_RATIO    = 0
+ALERT_FRAMES      = 20
+SMOOTHING_WINDOW  = 3
+FRAME_SKIP        = 2
+EAR_DROP_RATIO    = 0.75
 
 # Landmark indices
 LEFT_EYE    = [362, 385, 387, 263, 373, 380]
@@ -121,6 +103,13 @@ def request_reset():
     """Signal main() to immediately clear the drowsy counter (e.g. from voice command)."""
     global _reset_requested
     _reset_requested = True
+
+# Detection enable/disable flag
+_detection_enabled = True
+
+def set_detection_enabled(enabled):
+    global _detection_enabled
+    _detection_enabled = enabled
 
 # Alert callbacks
 def notify_drowsiness():
@@ -339,7 +328,6 @@ def build_face_landmarker():
     return mp_vision.FaceLandmarker.create_from_options(opts)
 
 def main(headless=False):
-    set_sensitivity("default")
     print("Loading model...")
     obj = joblib.load(MODEL_PATH)
     if isinstance(obj, dict):
@@ -356,6 +344,15 @@ def main(headless=False):
 
     print("Starting webcam...")
     cap = cv2.VideoCapture(0)
+    for _ in range(5):
+        if cap.isOpened():
+            ret, test_frame = cap.read()
+            if ret and test_frame is not None:
+                break
+        time.sleep(0.5)
+        cap = cv2.VideoCapture(0)
+    else:
+        raise RuntimeError("Webcam failed to provide frames after retries.")
     if not cap.isOpened():
         raise RuntimeError("Could not open webcam.")
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  CAPTURE_WIDTH)
@@ -452,6 +449,10 @@ def main(headless=False):
         ret, frame = cap.read()
         if not ret:
             break
+
+        if not _detection_enabled:
+            time.sleep(0.05)
+            continue
 
         h, w          = frame.shape[:2]
         run_inference = (frame_idx % FRAME_SKIP == 0)

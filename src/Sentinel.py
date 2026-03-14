@@ -1,3 +1,7 @@
+"""
+sentinel.py
+"""
+
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
@@ -10,7 +14,7 @@ import detection.detect as detect
 from voice_activation import voice_activate
 from Interface import SentinelApp
 
-alarm_playing = False # flag to track if alarm sound is currently playing (prevent multiple triggers)
+alarm_playing = False
 
 class _WakeUpHandler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -29,7 +33,7 @@ class _WakeUpHandler(BaseHTTPRequestHandler):
         else:
             self.send_response(404); self.end_headers()
     def log_message(self, format, *args):
-        return # suppress default logging
+        return
     
 # start HTTP server for wake-up calls from detection module
 def _do_play(data):
@@ -46,11 +50,11 @@ def _do_play(data):
         return
     path = None
     if getattr(app, "audio_manager", None):
-        path = getattr(app.audio_manager, "selected_file", None) # path to currently selected audio track in UI (if any)
+        path = getattr(app.audio_manager, "selected_file", None)
         print(f"[Sentinel] selected_file={path}")
     if not path:
         try:
-            path = app.config.get("Audio", "default_sound") # fallback to default sound if no track
+            path = app.config.get("Audio", "default_sound")
             print(f"[Sentinel] fallback path={path}")
         except Exception as e:
             print(f"[Sentinel] config fallback failed: {e}")
@@ -64,7 +68,7 @@ def _do_play(data):
 # connect stopping track to detect.py's failsafe trigger
 def _do_stop():
     global alarm_playing
-    alarm_playing = False # reset flag to let future alarms play
+    alarm_playing = False
     app = App.get_running_app()
     if not app:
         return
@@ -74,6 +78,14 @@ def _do_stop():
 def _start_server():
     server = HTTPServer(("127.0.0.1", 5000), _WakeUpHandler)
     server.serve_forever()
+
+def run_detection():
+    try:
+        detect.main(headless=False)
+    except Exception as e:
+        import traceback
+        print(f"[Detection] CRASHED: {e}")
+        traceback.print_exc()
 
 def execute_voice_command(command):
     app = App.get_running_app()
@@ -85,7 +97,7 @@ def execute_voice_command(command):
     if command == "STOP_ALARM":
         if app:
             app.trigger_failsafe()
-        Clock.schedule_once(lambda dt: _do_stop(), 0) # make sure alarm_playing flag is set to false
+        Clock.schedule_once(lambda dt: _do_stop(), 0)
     elif command == "DEACTIVATE_LISTENING":
         print("Sentinel is no longer listening. Say \'Hey Sent\' to activate again.\n")
         # hide UI indicator
@@ -95,14 +107,14 @@ def execute_voice_command(command):
         print("Disabling detection features.")
         if app:
             if getattr(app, 'detection_active', False): # check if detection is currently active before toggling
-                app.toggle_detection() # toggle detection off in UI)
+                app.toggle_detection()
             else:
                 print("Detection is already disabled.")
     elif command == "ENABLE_DETECTION":
         print("Enabling detection features.")
         if app:
             if not getattr(app, 'detection_active', False): # check if detection is currently inactive before toggling
-                app.toggle_detection() # toggle detection on in UI
+                app.toggle_detection()
             else:
                 print("Detection is already enabled.")
     elif command == "SHUT_DOWN_DEVICE":
@@ -131,9 +143,9 @@ def start_voice_listening():
 
 if __name__ == "__main__":
     print('Welcome to Sentinel')
-    detect_thread = threading.Thread(target=lambda: detect.main(headless=True), daemon=True) # run detection in background thread with headless=True to disable OpenCV windows
+    detect_thread = threading.Thread(target=run_detection, daemon=True)
     detect_thread.start()
-    threading.Thread(target=_start_server, daemon=True).start() # start HTTP server in background thread
+    threading.Thread(target=_start_server, daemon=True).start()
     voice_thread = threading.Thread(target=start_voice_listening, daemon=True)
     voice_thread.start()
     SentinelApp().run()
