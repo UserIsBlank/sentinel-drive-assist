@@ -1,6 +1,6 @@
 # Sentinel Drive-Assist
 
-Sentinel Drive-Assist is a real-time drowsiness detection system that helps drivers stay awake and alert while on the road, ensuring a safe trip from point A to point B. We are creating a drowsiness detection driver alert system which will alert a ground vehicle driver whenever they fall asleep. The device will monitor the drivers head and eye movements and play a loud sound when it detects drowsiness in the driver during driving. We want to help ensure the safety of drivers in ground vehicles by making sure they get to their destination safely.
+Sentinel Drive-Assist is a real-time drowsiness detection system that helps drivers stay awake and alert while on the road, ensuring a safe trip from point A to point B. We are creating a drowsiness detection driver alert system which will alert a vehicle driver whenever they fall asleep. The device will monitor the drivers head and eye movements and play a loud sound when it detects drowsiness in the driver. We want to help ensure the safety of drivers by making sure they get to their destination safely.
 * Link to project home page
 
 ## Table of Contents
@@ -9,16 +9,8 @@ Sentinel Drive-Assist is a real-time drowsiness detection system that helps driv
 1. [Project Status](#project-status)
 1. [Getting Started](#getting-started)
 	1. [Dependencies](#dependencies)
-	1. [Building](#building)
 	1. [Installation](#installation)
 	1. [Usage](#usage)
-1. [Release Process](#release-process)
-	1. [Versioning](#versioning)
-	1. [Payload](#payload)
-1. [How to Get Help](#how-to-get-help)
-1. [Further Reading](#further-reading)
-1. [Contributing](#contributing)
-1. [License](#license)
 1. [Authors](#authors)
 1. [Acknowledgements](#acknowledgements)
 
@@ -38,17 +30,13 @@ Show some of your APIs
 
 # Project Status
 
-Show the build status if you have a CI server:
-
-[![Build Status](http://your-server:12345/job/badge/icon)](http://your-server:12345/job/http://your-server:12345/job/badge/icon/)
-
-Describe the current release and any notes about the current state of the project. Examples: currently compiles on your host machine, but is not cross-compiling for ARM, APIs are not set, feature not implemented, etc.
+Currently compatible with Linux OS Only
 
 **[Back to top](#table-of-contents)**
 
 # Getting Started
 
-This section should provide instructions for other developers to
+This section should provide instructions for other developers too
 
 These instructions will get you a copy of the project up and running on your local machine for development and testing purposes. See deployment for notes on how to deploy the project on a live system.
 
@@ -68,33 +56,11 @@ To use the offline voice activation feature, download the Vosk "vosk-model-small
 Include a link to your github reposistory (you have no idea how people will find your code), and also a summary of how to clone.
 
 
-This project is [hosted on GitHub](https://github.com/embeddedartistry/embedded-resources). You can clone this project directly using this command:
+This project is [hosted on GitHub](https://github.com/UserIsBlank/sentinel-drive-assist). You can clone this project directly using this command:
 
 ```
-git clone git@github.com:embeddedartistry/embedded-resources.git
+git clone git@github.com:https://github.com/UserIsBlank/sentinel-drive-assist.git
 ```
-
-## Building
-
-Instructions for how to build your project
-
-```
- Open src folder using PyCharm or VS Code
-
- Main IDE Used for Development: PyCharm
-```
-
-## Running Tests
-
-Describe how to run unit tests for your project.
-
-```
-Examples should be included
-```
-
-### Other Tests
-
-If you have formatting checks, coding style checks, or static analysis tests that must pass before changes will be considered, add a section for those and provide instructions
 
 ## Installation
 
@@ -104,59 +70,15 @@ Instructions for how to install your project's build artifacts
 Examples should be included
 ```
 
-## Usage
-
-Instructions for using your project. Ways to run the program, how to include it in another project, etc.
-
-```
-Examples should be included
-```
-
-If your project provides an API, either provide details for usage in this document or link to the appropriate API reference documents
-
-**[Back to top](#table-of-contents)**
-
-# Release Process
-
-Talk about the release process. How are releases made? What cadence? How to get new releases?
-
-## Versioning
-
-This project uses [Semantic Versioning](http://semver.org/). For a list of available versions, see the [repository tag list](https://github.com/your/project/tags).
-
-## Payload
-
-**[Back to top](#table-of-contents)**
-
-# How to Get Help
-
-Provide any instructions or contact information for users who need to get further help with your project.
-
-# Contributing
-
-Provide details about how people can contribute to your project. If you have a contributing guide, mention it here. e.g.:
-
-We encourage public contributions! Please review [CONTRIBUTING.md](docs/CONTRIBUTING.md) for details on our code of conduct and development process.
-
-**[Back to top](#table-of-contents)**
-
-# Further Reading
-
-Provide links to other relevant documentation here
-
-**[Back to top](#table-of-contents)**
-
-# License
-
-Copyright (c) 2017 Embedded Artistry LLC
-
-This project is licensed under the MIT License - see [LICENSE.md](LICENSE.md) file for details.
 
 **[Back to top](#table-of-contents)**
 
 # Authors
 
-* **[Joshua Ha](https://github.com/UserIsBlank)** - [Project Manager / CV Engineer]
+* **[Joshua Ha](https://github.com/UserIsBlank)** - [Project Manager/ML Engineer]
+* **[Kian Heydari Marvi](https://github.com/MERL10N)** - [UI/UX Engineer]
+* **[Faith Thai](https://github.com/Chabbies)** - [Hardware/3D Design Engineer]
+* **[Selina Wu](https://github.com/ploscky)** - [Data/Voice AI Engineer]
 
 
 **[Back to top](#table-of-contents)**
@@ -166,5 +88,10 @@ This project is licensed under the MIT License - see [LICENSE.md](LICENSE.md) fi
 Provide proper credits, shoutouts, and honorable mentions here. Also provide links to relevant repositories, blog posts, or contributors worth mentioning.
 
 Give proper credits. This could be a link to any repo which inspired you to build this project, any blogposts or links to people who contributed in this project. If you used external code, link to the original source.
+
+MediaPipe: (https://github.com/google-ai-edge/mediapipe)
+
+Vosk API: (https://github.com/alphacep/vosk-api)
+
 
 **[Back to top](#table-of-contents)**
