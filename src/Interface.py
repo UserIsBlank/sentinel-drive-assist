@@ -354,4 +354,3 @@ class SentinelApp(App):
                 anim_out.bind(on_complete=_on_complete)
                 anim_out.start(mv)
             Clock.schedule_once(_fade_out, 7)
-

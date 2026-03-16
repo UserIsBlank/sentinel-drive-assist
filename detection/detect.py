@@ -15,7 +15,9 @@ lighting, and camera angle between users.
 """
 
 import os
-os.environ.setdefault('QT_QPA_PLATFORM', 'xcb')
+import platform
+if platform.system() == 'Linux' and 'arm' not in platform.machine().lower() and 'aarch64' not in platform.machine().lower():
+    os.environ.setdefault('QT_QPA_PLATFORM', 'xcb')
 import cv2
 import numpy as np
 import joblib
