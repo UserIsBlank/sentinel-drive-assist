@@ -1,10 +1,14 @@
+"""
+voice_activation.py
+"""
+
 from vosk import Model, KaldiRecognizer # add vosk import for offline model
 import sounddevice as sd
 import queue
 import json
 import time # add time import for inactivity timeout
 
-MODEL_PATH = "../vosk-model-small-en-us-0.15"
+MODEL_PATH = "vosk-model-small-en-us-0.15"
 SAMPLE_RATE = 16000
 activate_word = "hey sent" # make activation word shorter for better recognition
 
@@ -44,6 +48,32 @@ VOICE_COMMANDS = {
     "shut down": "SHUT_DOWN_DEVICE",
     "power off": "SHUT_DOWN_DEVICE",
     "turn off": "SHUT_DOWN_DEVICE",
+
+    # reset alert commands
+    "i'm awake": "RESET_ALERT",
+    "i am awake": "RESET_ALERT",
+    "reset alert": "RESET_ALERT",
+    "clear alert": "RESET_ALERT",
+    "cancel alert": "RESET_ALERT",
+    "dismiss alert": "RESET_ALERT",
+
+    # sensitivity commands
+    "use lower sensitivity": "SENSITIVITY_CONSERVATIVE",
+    "use low sensitivity": "SENSITIVITY_CONSERVATIVE",
+    "lower sensitivity": "SENSITIVITY_CONSERVATIVE",
+    "low sensitivity": "SENSITIVITY_CONSERVATIVE",
+    "sensitivity low": "SENSITIVITY_CONSERVATIVE",
+    "use higher sensitivity": "SENSITIVITY_AGGRESSIVE",
+    "use high sensitivity": "SENSITIVITY_AGGRESSIVE",
+    "high sensitivity": "SENSITIVITY_AGGRESSIVE",
+    "sensitivity high": "SENSITIVITY_AGGRESSIVE",
+    "use default sensitivity": "SENSITIVITY_DEFAULT",
+    "use medium sensitivity": "SENSITIVITY_DEFAULT",
+    "use normal sensitivity": "SENSITIVITY_DEFAULT",
+    "default sensitivity": "SENSITIVITY_DEFAULT",
+    "sensitivity default": "SENSITIVITY_DEFAULT",
+    "medium sensitivity": "SENSITIVITY_DEFAULT",
+    "normal sensitivity": "SENSITIVITY_DEFAULT",
 }
 
 def voice_activate(command): #argument is a function in main program to execute commands

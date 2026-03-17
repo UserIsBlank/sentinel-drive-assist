@@ -8,31 +8,14 @@ Loads drowsiness_model.pkl produced by train.py, opens the webcam,
 and continuously classifies the driver as AWAKE, DROWSY, LOOKING DOWN, or
 HEAD TURNED. Triggers a visual WAKE UP alert after sustained drowsiness.
 
-Detection is based on 7 facial geometry features extracted each frame via
-MediaPipe FaceLandmarker:
-  - Eye Aspect Ratio (EAR) — left, right, mean, asymmetry, minimum
-  - Mouth Aspect Ratio (MAR) — detects yawning independently of eye closure
-  - EAR/MAR ratio
-
 On startup, a 4-second calibration phase measures the user's personal
 awake EAR and MAR baseline. Features are shifted relative to this baseline
 before each model call, compensating for natural variation in eye shape,
 lighting, and camera angle between users.
-
-Drowsiness is detected via two independent paths:
-  1. Eye closure  - model is called when EAR drops below 75% of baseline
-                    and head pose is stable
-  2. Yawning      - MAR exceeding 160% of baseline directly increments
-                    the drowsy counter regardless of eye state
-
-Head pose (pitch/yaw via solvePnP) is used only for suppression:
-  - Pitch > 20 degrees  -> LOOKING DOWN  (suppress false positives)
-  - Yaw   > 25 degrees  -> HEAD TURNED   (suppress false positives)
-  Suppression is overridden if EAR drops below 55% of baseline, since
-  closed eyes corrupt landmark geometry and produce unreliable pose.
 """
 
 import os
+os.environ.setdefault('QT_QPA_PLATFORM', 'xcb')
 import cv2
 import numpy as np
 import joblib
@@ -52,18 +35,22 @@ MODEL_PATH        = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..
 FACE_MODEL_PATH   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models", "face_landmarker.task")
 CAPTURE_WIDTH     = 320
 CAPTURE_HEIGHT    = 240
-ALERT_FRAMES      = 36
-SMOOTHING_WINDOW  = 5
-PITCH_SUPPRESS    = 20.0
-YAW_SUPPRESS      = 25.0
+
+PITCH_SUPPRESS       = 20.0
+YAW_SUPPRESS         = 25.0
+THRESHOLD_FLOOR      = 0.50
+CALIBRATION_SECS     = 4
+EAR_DROP_RATIO       = 0.75
+EAR_CLOSED_OVERRIDE  = 0.55
+MAR_YAWN_RATIO       = 1.60
+YAWN_COUNT_WEIGHT    = 2
+RECOVERY_SECS        = 1
+DEBUG                = False
+
+ALERT_FRAMES      = 20
+SMOOTHING_WINDOW  = 3
 FRAME_SKIP        = 2
-THRESHOLD_FLOOR   = 0.50
-CALIBRATION_SECS  = 4
-EAR_DROP_RATIO        = 0.75
-EAR_CLOSED_OVERRIDE   = 0.55
-MAR_YAWN_RATIO    = 1.60
-YAWN_COUNT_WEIGHT = 2
-DEBUG             = False
+EAR_DROP_RATIO    = 0.75
 
 # Landmark indices
 LEFT_EYE    = [362, 385, 387, 263, 373, 380]
@@ -88,10 +75,45 @@ ORANGE = (0, 140, 255)
 WHITE  = (255, 255, 255)
 BLACK  = (0, 0, 0)
 GREY   = (160, 160, 160)
+PRESETS = {
+    "default": {"alert_frames": 20, "smoothing_window": 3, "frame_skip": 2, "ear_drop_ratio": 0.75},
+    "aggressive": {"alert_frames": 10, "smoothing_window": 2,"frame_skip": 2, "ear_drop_ratio": 0.75},
+    "conservative": {"alert_frames": 30, "smoothing_window": 5,"frame_skip": 3, "ear_drop_ratio": 0.80},
+}
 
-# alert callback (called when drowsiness is detected)
+config = PRESETS["default"].copy()
+
+# Sensitivity presets
+def set_sensitivity(preset):
+    global config, ALERT_FRAMES, SMOOTHING_WINDOW, FRAME_SKIP, EAR_DROP_RATIO
+
+    if preset in PRESETS:
+        config.update(PRESETS[preset])
+
+        ALERT_FRAMES     = config["alert_frames"]
+        SMOOTHING_WINDOW = config["smoothing_window"]
+        FRAME_SKIP       = config["frame_skip"]
+        EAR_DROP_RATIO   = config["ear_drop_ratio"]
+
+        print(f"Sensitivity set to '{preset}': {config}")
+
+# Manual reset flag (set by request_reset(), checked each frame in main())
+_reset_requested = False
+
+def request_reset():
+    """Signal main() to immediately clear the drowsy counter (e.g. from voice command)."""
+    global _reset_requested
+    _reset_requested = True
+
+# Detection enable/disable flag
+_detection_enabled = True
+
+def set_detection_enabled(enabled):
+    global _detection_enabled
+    _detection_enabled = enabled
+
+# Alert callbacks
 def notify_drowsiness():
-    print("[DEBUG] notify_drowsiness() called")
     def _post():
         url = "http://127.0.0.1:5000/wake_up"
         payload = json.dumps({"event": "WAKE_UP"}).encode("utf-8")
@@ -102,19 +124,27 @@ def notify_drowsiness():
             pass
     threading.Thread(target=_post, daemon=True).start()
 
+def notify_alert_cleared():
+    def _post():
+        url = "http://127.0.0.1:5000/alert_cleared"
+        payload = json.dumps({"event": "ALERT_CLEARED"}).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req, timeout=0.5)
+        except Exception:
+            pass
+    threading.Thread(target=_post, daemon=True).start()
 
 # Feature helpers
 def _lm_to_pts(landmarks, indices, w, h):
     return np.array([[landmarks[i].x * w, landmarks[i].y * h]
                      for i in indices], dtype=float)
 
-
 def eye_aspect_ratio(pts):
     A = dist.euclidean(pts[1], pts[5])
     B = dist.euclidean(pts[2], pts[4])
     C = dist.euclidean(pts[0], pts[3])
     return (A + B) / (2.0 * C) if C > 0 else 0.0
-
 
 def mouth_aspect_ratio(pts):
     vert  = (dist.euclidean(pts[2], pts[6]) + dist.euclidean(pts[3], pts[7])) / 2.0
@@ -161,10 +191,8 @@ def build_feature_vector(lm, w, h):
     pitch, yaw = get_head_pose(lm, w, h)
     return (ear_l, ear_r, ear_m, ear_asym, ear_min, mar, ear_mar, pitch, yaw)
 
-
 def build_model_input(ear_l, ear_r, ear_m, ear_asym, ear_min, mar, ear_mar):
     return [[ear_l, ear_r, ear_m, ear_asym, ear_min, mar, ear_mar]]
-
 
 def apply_calibration(features, baseline_ear, baseline_mar):
     """
@@ -183,14 +211,12 @@ def apply_calibration(features, baseline_ear, baseline_mar):
     f[6]  = f[2] / (f[5] + 1e-6)
     return [f]
 
-
 # Draw landmarks
 def draw_landmarks(frame, landmarks, indices, color, w, h):
     for i in indices:
         cv2.circle(frame,
                    (int(landmarks[i].x * w), int(landmarks[i].y * h)),
                    1, color, -1)
-
 
 def overlay_bar(frame, label, value, max_val, x, y, color, width=120):
     filled = min(int((value / max_val) * width), width) if max_val > 0 else 0
@@ -199,7 +225,6 @@ def overlay_bar(frame, label, value, max_val, x, y, color, width=120):
     cv2.rectangle(frame, (x, y),          (x + width,  y + 10), WHITE,  1)
     cv2.putText(frame, f"{label}:{value:.2f}", (x, y - 3),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.35, WHITE, 1)
-
 
 def draw_calibration_screen(frame, elapsed, total, ear_samples, w, h):
     overlay = frame.copy()
@@ -223,7 +248,6 @@ def draw_calibration_screen(frame, elapsed, total, ear_samples, w, h):
         cv2.putText(frame, f"EAR samples:{len(ear_samples)}  "
                            f"mean:{np.mean(ear_samples):.3f}",
                     (20, h - 36), cv2.FONT_HERSHEY_SIMPLEX, 0.33, GREY, 1)
-
 
 def draw_hud(frame, ear_m, mar, prob, pitch, yaw,
              drowsy_count, state, fps, baseline_ear, threshold,
@@ -283,7 +307,6 @@ def draw_hud(frame, ear_m, mar, prob, pitch, yaw,
         cv2.putText(frame, "WAKE UP!", (w // 2 - 70, h // 2),
                     cv2.FONT_HERSHEY_DUPLEX, 1.1, RED, 2)
 
-
 # MediaPipe setup
 def build_face_landmarker():
     model_path = pathlib.Path(FACE_MODEL_PATH)
@@ -305,9 +328,10 @@ def build_face_landmarker():
     )
     return mp_vision.FaceLandmarker.create_from_options(opts)
 
-
-def main():
+def main(headless=False):
     print("Loading model...")
+    time.sleep(2) # wait for Kivy to finish initializing
+
     obj = joblib.load(MODEL_PATH)
     if isinstance(obj, dict):
         pipeline  = obj["pipeline"]
@@ -323,6 +347,15 @@ def main():
 
     print("Starting webcam...")
     cap = cv2.VideoCapture(0)
+    for _ in range(5):
+        if cap.isOpened():
+            ret, test_frame = cap.read()
+            if ret and test_frame is not None:
+                break
+        time.sleep(0.5)
+        cap = cv2.VideoCapture(0)
+    else:
+        raise RuntimeError("Webcam failed to provide frames after retries.")
     if not cap.isOpened():
         raise RuntimeError("Could not open webcam.")
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  CAPTURE_WIDTH)
@@ -365,12 +398,14 @@ def main():
         cal_frame_idx += 1
         draw_calibration_screen(frame, elapsed, CALIBRATION_SECS,
                                 cal_ear_samples, w, h)
-        cv2.imshow("Sentinel Drive Assist (Pi)", frame)
-        if cv2.waitKey(1) & 0xFF == ord("q"):
-            cap.release()
-            face_landmarker.close()
-            cv2.destroyAllWindows()
-            return
+        # show calibration screen when in headless mode
+        if not headless:
+            cv2.imshow("Sentinel Drive Assist (Pi)", frame)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                cap.release()
+                face_landmarker.close()
+                cv2.destroyAllWindows()
+                return
 
     POPULATION_EAR_MEAN = 0.28
     POPULATION_MAR_MEAN = 0.45
@@ -408,12 +443,26 @@ def main():
     cached_suppressed   = None
     cached_yawning      = False
 
-    alert_active = False # flag to track if alert is currently active (prevent multiple triggers)
+    alert_active  = False  # flag to track if alert is currently active (prevent multiple triggers)
+    recovery_start = None  # timestamp when eyes-open recovery window began
+
+    global _reset_requested
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
+
+        if not _detection_enabled:
+            if not headless:
+                cv2.putText(frame, "DETECTION DISABLED", (10, frame.shape[0] // 2),
+                            cv2.FONT_HERSHEY_DUPLEX, 0.7, (0, 140, 255), 2)
+                cv2.imshow("Sentinel Drive Assist (Pi)", frame)
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    break
+            else:
+                time.sleep(0.05)
+            continue
 
         h, w          = frame.shape[:2]
         run_inference = (frame_idx % FRAME_SKIP == 0)
@@ -475,6 +524,17 @@ def main():
                     drowsy_count = (drowsy_count + 1 if is_drowsy
                                     else max(0, drowsy_count - 1))
 
+                # Auto-recovery: if alert is active and eyes have been open for
+                # RECOVERY_SECS continuously, force-clear the drowsy counter
+                if alert_active and not ear_below_gate and not suppressed_reason:
+                    if recovery_start is None:
+                        recovery_start = time.time()
+                    elif time.time() - recovery_start >= RECOVERY_SECS:
+                        drowsy_count   = 0
+                        recovery_start = None
+                else:
+                    recovery_start = None
+
                 if DEBUG:
                     print(f"EAR:{ear_m:.3f}(gate:{ear_gate:.3f} override:{baseline_ear*EAR_CLOSED_OVERRIDE:.3f})  "
                           f"MAR:{mar:.3f}(yawn_gate:{yawn_gate:.3f})  "
@@ -501,6 +561,7 @@ def main():
             else:
                 drowsy_count      = 0
                 yawn_count        = 0
+                recovery_start    = None
                 cached_lm         = None
                 cached_ear_m      = cached_mar = cached_prob = 0.0
                 cached_pitch      = cached_yaw = 0.0
@@ -508,6 +569,12 @@ def main():
                 cached_suppressed = None
                 cached_yawning    = False
                 prob_buffer.clear()
+
+        # Manual reset from voice command
+        if _reset_requested:
+            drowsy_count    = 0
+            recovery_start  = None
+            _reset_requested = False
 
         if cached_lm is not None:
             draw_landmarks(frame, cached_lm, LEFT_EYE,  GREEN,  w, h)
@@ -524,27 +591,26 @@ def main():
                  drowsy_count, cached_state, fps,
                  baseline_ear, threshold, cached_suppressed,
                  cached_yawning, yawn_gate)
-        
+
         # Wake up alert trigger
         if drowsy_count >= ALERT_FRAMES:
             if not alert_active:
-                print(f"[DEBUG] Triggering alarm — drowsy_count={drowsy_count}, alert_active={alert_active}")
                 notify_drowsiness()
                 alert_active = True
         else:
             if alert_active:
-                print(f"[DEBUG] Resetting alert — drowsy_count={drowsy_count}")
+                notify_alert_cleared()
             alert_active = False
 
-        cv2.imshow("Sentinel Drive Assist (Pi)", frame)
-        if cv2.waitKey(1) & 0xFF == ord("q"):
-            break
+        if not headless:
+            cv2.imshow("Sentinel Drive Assist (Pi)", frame)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
 
     cap.release()
     face_landmarker.close()
     cv2.destroyAllWindows()
     print("Stopped.")
-
 
 if __name__ == "__main__":
     main()
