@@ -2,19 +2,19 @@
 voice_activation.py
 """
 
-from vosk import Model, KaldiRecognizer # add vosk import for offline model
+from vosk import Model, KaldiRecognizer
 import sounddevice as sd
 import queue
 import json
-import time # add time import for inactivity timeout
+import urllib.request
+import time
 
 MODEL_PATH = "vosk-model-small-en-us-0.15"
 SAMPLE_RATE = 16000
-activate_word = "hey sent" # make activation word shorter for better recognition
+activate_word = "hey sent"
+ACTIVE_TIMEOUT = 10
 
-ACTIVE_TIMEOUT = 10 # auto-deactivate listening after 10 seconds of inactivity
-
-# possible commands dictionary:
+# Possible commands dictionary:
 VOICE_COMMANDS = {
     # mute alarm commands
     "stop alarm": "STOP_ALARM",
@@ -76,24 +76,34 @@ VOICE_COMMANDS = {
     "normal sensitivity": "SENSITIVITY_DEFAULT",
 }
 
-def voice_activate(command): #argument is a function in main program to execute commands
-    is_active = False # sentinel's default setting is inactive (not listening)
-    last_active_time = None # track last time a command was recognized
+def send_command_to_ui(cmd_string):
+    """Sends the recognized command to the main Kivy UI process via HTTP"""
+    try:
+        payload = json.dumps({"command": cmd_string}).encode("utf-8")
+        req = urllib.request.Request(
+            "http://127.0.0.1:5000/voice_command", 
+            data=payload, 
+            headers={"Content-Type": "application/json"}
+        )
+        urllib.request.urlopen(req, timeout=1.0)
+    except Exception as e:
+        print(f"[Voice] Failed to send command to UI: {e}")
 
-    # restrict Vosk to only listen for phrases specified (ignore random noise/speech)
+def voice_activate():
+    is_active = False
+    last_active_time = None
+
     phrases = [activate_word] + list(VOICE_COMMANDS.keys())
 
-    # initialize Vosk model and recognizer
     model = Model(MODEL_PATH)
     rec = KaldiRecognizer(model, SAMPLE_RATE, json.dumps(phrases))
 
-    q = queue.Queue() # create thread-safe queue for real-time audio data
+    q = queue.Queue()
 
-    # callback function to capture continuous audio data (called every time new audio arrives)
-    def audio_callback(indata, frames, time, status):
+    def audio_callback(indata, frames, time_info, status):
         if status:
             print(status, flush=True)
-        q.put(bytes(indata)) # add audio data to queue
+        q.put(bytes(indata))
 
     print("Say 'Hey Sent' to activate\n")
 
@@ -101,25 +111,20 @@ def voice_activate(command): #argument is a function in main program to execute 
         while True:
             try:
                 try:
-                    data = q.get(timeout=0.25 if is_active else None) # use short timeout to check for inactivity when active 
+                    data = q.get(timeout=0.25 if is_active else None)
                 except queue.Empty:
-                    # no audio received in last 0.25 s (check timeout)
                     if is_active and last_active_time is not None:
                         if (time.time() - last_active_time) >= ACTIVE_TIMEOUT:
                             is_active = False
                             last_active_time = None
                             print("Auto-deactivated due to inactivity.")
-                            try:
-                                command('DEACTIVATE_LISTENING') # notify main program to stop listening and hide mic popup
-                            except Exception as e:
-                                print("Auto-deactivation callback error:", e)
+                            send_command_to_ui("DEACTIVATE_LISTENING")
                     continue
 
-                # feed audio block to recognizer
-                if rec.AcceptWaveform(data): # becomes true once complete phrase is recognized
+                if rec.AcceptWaveform(data):
                     result = rec.Result()
-                    result_dict = json.loads(result) # parse JSON result
-                    audio_text = result_dict.get("text", "").lower().strip() # extract recognized text
+                    result_dict = json.loads(result)
+                    audio_text = result_dict.get("text", "").lower().strip()
                     if not audio_text:
                         print("Come Again?")
                         continue
@@ -129,18 +134,14 @@ def voice_activate(command): #argument is a function in main program to execute 
                     if not is_active:
                         if activate_word in audio_text:
                             is_active = True
-                            last_active_time = time.time() # reset inactivity timer
+                            last_active_time = time.time()
                             print("Sentinel is now listening.")
-                            # notify main program to show mic popup (listening)
-                            try:
-                                command('VOICE_ACTIVATED')
-                            except Exception as e:
-                                print("Activation callback error:", e)
+                            send_command_to_ui("VOICE_ACTIVATED")
                         else:
                             print("Sentinel is waiting for activation word.")
                         continue
 
-                    last_active_time = time.time() # reset inactivity timer on any recognized command
+                    last_active_time = time.time()
                             
                     # active mode: "hey sentinel" has been said (can say commands)
                     match_input = None
@@ -153,7 +154,7 @@ def voice_activate(command): #argument is a function in main program to execute 
                         continue
 
                     # execute matched command (send to main program)
-                    command(match_input)
+                    send_command_to_ui(match_input)
 
                     # deactivate listening or shut down device to stop script
                     if match_input == "DEACTIVATE_LISTENING":
@@ -162,3 +163,7 @@ def voice_activate(command): #argument is a function in main program to execute 
                         break
             except KeyboardInterrupt:
                 break
+
+if __name__ == "__main__":
+    print("[Voice] Starting standalone voice activation process...")
+    voice_activate()

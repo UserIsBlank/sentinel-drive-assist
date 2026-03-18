@@ -5,16 +5,32 @@ sentinel.py
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
+import subprocess
 import threading, json
+import urllib.request
 from kivy.app import App
-from kivy.clock import Clock
+from kivy.clock import Clock, mainthread
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-import detection.detect as detect
-from voice_activation import voice_activate
 from Interface import SentinelApp
 
 alarm_playing = False
+alarm_process = None
+
+def _send_detect_command(path, data=None):
+    """Send a command to the detection process on port 5001"""
+    def _post():
+        payload = json.dumps(data or {}).encode("utf-8")
+        req = urllib.request.Request(
+            f"http://127.0.0.1:5001{path}",
+            data=payload,
+            headers={"Content-Type": "application/json"}
+        )
+        try:
+            urllib.request.urlopen(req, timeout=1.0)
+        except Exception:
+            pass
+    threading.Thread(target=_post, daemon=True).start()
 
 class _WakeUpHandler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -24,103 +40,108 @@ class _WakeUpHandler(BaseHTTPRequestHandler):
             data = json.loads(body.decode("utf-8") or "{}")
         except Exception:
             data = {}
+            
         if self.path == "/wake_up":
             Clock.schedule_once(lambda dt: _do_play(data), 0)
-            self.send_response(200); self.end_headers()
+            self.send_response(200)
+            self.end_headers()
         elif self.path == "/alert_cleared":
             Clock.schedule_once(lambda dt: _do_stop(), 0)
-            self.send_response(200); self.end_headers()
+            self.send_response(200)
+            self.end_headers()
+        elif self.path == "/voice_command":
+            cmd = data.get("command")
+            if cmd:
+                Clock.schedule_once(lambda dt: execute_voice_command(cmd), 0)
+            self.send_response(200)
+            self.end_headers()
         else:
-            self.send_response(404); self.end_headers()
+            self.send_response(404)
+            self.end_headers()
+            
     def log_message(self, format, *args):
         return
-    
-# start HTTP server for wake-up calls from detection module
+
+@mainthread
 def _do_play(data):
-    global alarm_playing
-    print("[Sentinel] _do_play called, alarm_playing=", alarm_playing)
+    global alarm_playing, alarm_process
 
     if alarm_playing:
-        print("[Sentinel] alarm_playing is True, returning")
         return
 
     app = App.get_running_app()
     if not app:
-        print("[Sentinel] no app running, returning")
         return
+        
     path = None
     if getattr(app, "audio_manager", None):
         path = getattr(app.audio_manager, "selected_file", None)
-        print(f"[Sentinel] selected_file={path}")
+        
     if not path:
         try:
             path = app.config.get("Audio", "default_sound")
-            print(f"[Sentinel] fallback path={path}")
-        except Exception as e:
-            print(f"[Sentinel] config fallback failed: {e}")
+        except Exception:
             path = None
-    # play track if path exists and app has audio manager with play_track method
-    print(f"[Sentinel] final path={path}")
-    if path and getattr(app, "audio_manager", None) and hasattr(app.audio_manager, "play_track"):
-        app.audio_manager.play_track(path)
-        alarm_playing = True # alarm is now playing
+            
+    if path and not alarm_playing:
+        if not os.path.isabs(path):
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            path = os.path.normpath(os.path.join(base_dir, path))
+            
+        print(f"[Sentinel] Bypassing Kivy audio, playing via mpg123: {path}", flush=True)
+        alarm_process = subprocess.Popen(
+            ["mpg123", "--loop", "-1", path], 
+            stdout=subprocess.DEVNULL, 
+            stderr=subprocess.DEVNULL
+        )
+        alarm_playing = True
 
-# connect stopping track to detect.py's failsafe trigger
+@mainthread
 def _do_stop():
-    global alarm_playing
+    global alarm_playing, alarm_process
     alarm_playing = False
-    app = App.get_running_app()
-    if not app:
-        return
-    if getattr(app, "audio_manager", None) and hasattr(app.audio_manager, "stop_track"):
-        app.audio_manager.stop_track()
+    
+    if alarm_process:
+        alarm_process.terminate()
+        alarm_process = None
 
 def _start_server():
     server = HTTPServer(("127.0.0.1", 5000), _WakeUpHandler)
     server.serve_forever()
 
-def run_detection():
-    try:
-        detect.main(headless=False)
-    except Exception as e:
-        import traceback
-        print(f"[Detection] CRASHED: {e}")
-        traceback.print_exc()
-
 def execute_voice_command(command):
     app = App.get_running_app()
-    # show UI indicator
     if command == "VOICE_ACTIVATED":
         if app and hasattr(app, 'show_voice_popup'):
             app.show_voice_popup()
         return
+        
     if command == "STOP_ALARM":
         if app:
             app.trigger_failsafe()
         Clock.schedule_once(lambda dt: _do_stop(), 0)
     elif command == "DEACTIVATE_LISTENING":
-        print("Sentinel is no longer listening. Say \'Hey Sent\' to activate again.\n")
-        # hide UI indicator
+        print("Sentinel is no longer listening. Say 'Hey Sent' to activate again.\n")
         if app and hasattr(app, 'hide_voice_popup'):
             app.hide_voice_popup()
     elif command == "DISABLE_DETECTION":
         print("Disabling detection features.")
         if app:
-            if getattr(app, 'detection_active', False): # check if detection is currently active before toggling
+            if getattr(app, 'detection_active', False):
                 app.toggle_detection()
             else:
                 print("Detection is already disabled.")
     elif command == "ENABLE_DETECTION":
         print("Enabling detection features.")
         if app:
-            if not getattr(app, 'detection_active', False): # check if detection is currently inactive before toggling
+            if not getattr(app, 'detection_active', False):
                 app.toggle_detection()
             else:
                 print("Detection is already enabled.")
     elif command == "SHUT_DOWN_DEVICE":
         print("Shutting down Sentinel. Goodbye!")
         if app:
-            if hasattr(app, 'hide_voice_popup'): # hide voice popup when shutting down
+            if hasattr(app, 'hide_voice_popup'):
                 app.hide_voice_popup()
             app.stop()
     elif command in ("SENSITIVITY_CONSERVATIVE", "SENSITIVITY_DEFAULT", "SENSITIVITY_AGGRESSIVE"):
@@ -130,22 +151,44 @@ def execute_voice_command(command):
             "SENSITIVITY_AGGRESSIVE":   "aggressive",
         }
         preset = preset_map[command]
-        detect.set_sensitivity(preset)
+        _send_detect_command("/set_sensitivity", {"preset": preset})
         if app and hasattr(app, 'set_sensitivity'):
             Clock.schedule_once(lambda dt: app.set_sensitivity(preset), 0)
     elif command == "RESET_ALERT":
         print("Resetting drowsiness alert via voice command.")
-        detect.request_reset()
+        _send_detect_command("/request_reset")
         Clock.schedule_once(lambda dt: _do_stop(), 0)
-
-def start_voice_listening():
-    voice_activate(execute_voice_command)
 
 if __name__ == "__main__":
     print('Welcome to Sentinel')
-    detect_thread = threading.Thread(target=run_detection, daemon=True)
-    detect_thread.start()
+
+    detect_script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 '..', 'detection', 'detect.py')
+    detect_proc = subprocess.Popen(
+        [sys.executable, detect_script, "--headless"],
+        stdout=None, stderr=None
+    )
+
     threading.Thread(target=_start_server, daemon=True).start()
-    voice_thread = threading.Thread(target=start_voice_listening, daemon=True)
-    voice_thread.start()
+
+    voice_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'voice_activation.py')
+    voice_proc = subprocess.Popen(
+        [sys.executable, voice_script],
+        stdout=None, stderr=None
+    )
+
+    def _apply_saved_settings(dt):
+        app = App.get_running_app()
+        if app:
+            saved_sensitivity = app.config.get('System', 'sensitivity')
+            _send_detect_command("/set_sensitivity", {"preset": saved_sensitivity})
+            saved_detection = app.config.get('System', 'drowsiness_detection')
+            enabled = saved_detection == 'True'
+            _send_detect_command("/set_detection_enabled", {"enabled": enabled})
+    Clock.schedule_once(_apply_saved_settings, 3)
+
     SentinelApp().run()
+
+    detect_proc.terminate()
+    voice_proc.terminate()
+    detect_proc.wait(timeout=5)

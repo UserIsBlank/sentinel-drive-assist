@@ -28,41 +28,77 @@ from kivy.uix.modalview import ModalView
 import random
 import os
 import threading
+import json
+import urllib.request as urlreq
 
 kivy.require('1.11.1')
 
-# Config
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def resolve_audio_path(path):
+    """Turn a possibly-relative audio path into an absolute one"""
+    if not path:
+        return path
+    if os.path.isabs(path):
+        return path
+    return os.path.normpath(os.path.join(_BASE_DIR, path))
+
+def _send_detect_command(path, data=None):
+    """Send a command to the detection process on port 5001."""
+    def _post():
+        payload = json.dumps(data or {}).encode("utf-8")
+        req = urlreq.Request(
+            f"http://127.0.0.1:5001{path}",
+            data=payload,
+            headers={"Content-Type": "application/json"}
+        )
+        try:
+            urlreq.urlopen(req, timeout=1.0)
+        except Exception:
+            pass
+    threading.Thread(target=_post, daemon=True).start()
+
 Window.clearcolor = (0.427, 0.435, 0.478, 1)
 Window.size = (900, 550)
 
-font_path = os.path.join(os.path.dirname(__file__), '../fonts/Roboto_Slab/RobotoSlab-VariableFont_wght.ttf')
+font_path = os.path.join(_BASE_DIR, '../fonts/Roboto_Slab/RobotoSlab-VariableFont_wght.ttf')
 if os.path.exists(font_path):
     LabelBase.register(name="SentinelFont", fn_regular=font_path)
 
 class AudioManager(EventDispatcher):
     current_sound = ObjectProperty(None, allownone=True)
-    volume_level = NumericProperty(0.5)  # Default 50%
+    volume_level = NumericProperty(0.5)
     is_muted = BooleanProperty(False)
     selected_file = StringProperty(None)
 
     def play_track(self, path):
         if not path:
+            print("[Audio] play_track: no path provided", flush=True)
             return
 
-        import traceback
-        print("[Audio] play_track called from:")
-        traceback.print_stack()
+        try:
+            abs_path = resolve_audio_path(path)
+            print(f"[Audio] play_track: resolved '{path}' -> '{abs_path}'", flush=True)
 
-        self.stop_track()
+            if not os.path.isfile(abs_path):
+                print(f"[Audio] Error: File not found: {abs_path}", flush=True)
+                return
 
-        self.current_sound = SoundLoader.load(path)
+            self.stop_track()
 
-        if self.current_sound:
-            self._apply_volume()
-            self.current_sound.play()
-            print(f"[Audio] Playing: {path}")
-        else:
-            print(f"[Audio] Error: Could not load {path}")
+            print(f"[Audio] SoundLoader.load('{abs_path}')...", flush=True)
+            self.current_sound = SoundLoader.load(abs_path)
+
+            if self.current_sound:
+                self._apply_volume()
+                self.current_sound.play()
+                print(f"[Audio] Playing: {abs_path}", flush=True)
+            else:
+                print(f"[Audio] Error: SoundLoader returned None for {abs_path}", flush=True)
+        except Exception as e:
+            import traceback as tb
+            print(f"[Audio] play_track EXCEPTION: {e}", flush=True)
+            tb.print_exc()
 
     def stop_track(self):
         if self.current_sound:
@@ -104,7 +140,6 @@ class SoundItem(ButtonBehavior, BoxLayout):
             self.show_confirmation_popup()
 
     def show_confirmation_popup(self):
-        # Create the popup content
         content = BoxLayout(orientation='vertical', padding=10, spacing=10)
 
         lbl = Label(text=f"Set '{self.text}' as your\ndefault alert sound?",
@@ -123,17 +158,14 @@ class SoundItem(ButtonBehavior, BoxLayout):
         popup = Popup(title="Confirm Selection", content=content,
                       size_hint=(None, None), size=("300dp", "200dp"))
 
-        # Bind Button Actions
         btn_yes.bind(on_release=lambda x: self.confirm_selection(popup))
         btn_no.bind(on_release=popup.dismiss)
 
         popup.open()
 
     def confirm_selection(self, popup):
-        app = App.get_running_app()  # You must get the running app here again
-        # 1. Update the AudioManager property
+        app = App.get_running_app()
         app.audio_manager.set_default(self.sound_file)
-        # 2. Update the config and write to file
         app.config.set('Audio', 'default_sound', self.sound_file)
         app.config.write()
         popup.dismiss()
@@ -178,26 +210,24 @@ class SentinelApp(App):
                 self.config.write()
 
             self.audio_manager.selected_file = saved_sound
-            print(f"[System] Startup Sound Loaded: {saved_sound}")
+            abs_check = resolve_audio_path(saved_sound)
+            if os.path.isfile(abs_check):
+                print(f"[System] Startup Sound Loaded: {saved_sound}  (resolved: {abs_check})")
+            else:
+                print(f"[System] WARNING: Sound file not found! raw={saved_sound}  resolved={abs_check}")
 
             saved_detection = self.config.get('System', 'drowsiness_detection')
             self.detection_active = True if saved_detection == 'True' else False
-            detect_module = sys.modules.get('detection.detect')
-            if detect_module:
-                detect_module.set_detection_enabled(self.detection_active)
 
             saved_sensitivity = self.config.get('System', 'sensitivity')
             self.sensitivity = saved_sensitivity
-            detect_module = sys.modules.get('detection.detect')
-            if detect_module:
-                detect_module.set_sensitivity(saved_sensitivity)
             print(f"[System] Startup Sensitivity: {saved_sensitivity}")
 
             Builder.load_file('interface.kv')
 
-            self.voice_popup = None # voice command popup reference
-            self.voice_image = None # voice command image reference
-            self.voice_animation = None # voice command animation reference
+            self.voice_popup = None
+            self.voice_image = None
+            self.voice_animation = None
             self.message_library = ["Did you know? Drowsy driving is as dangerous as drunk driving.",
                                     "Take a brake! Get some rest and fuel up!",
                                     "Did you know? Yawning is a common sign of drowsiness.",
@@ -214,7 +244,7 @@ class SentinelApp(App):
             if getattr(self, 'voice_popup', None):
                 return
             
-            mic_img_path = os.path.join(os.path.dirname(__file__), '../icons/microphone.png')
+            mic_img_path = os.path.join(_BASE_DIR, '../icons/microphone.png')
             base_size = dp(100)
             self.voice_image = Image(source=mic_img_path, size_hint=(None, None), size=(base_size, base_size), 
                                      pos_hint={'center_x': 0.5, 'center_y': 0.3}, allow_stretch=True)
@@ -241,31 +271,27 @@ class SentinelApp(App):
             
             if getattr(self, 'voice_animation', None) and getattr(self, 'voice_image', None):
                 try:
-                    self.voice_animation.cancel(self.voice_image) # stop animation if it's still running
+                    self.voice_animation.cancel(self.voice_image)
                 except Exception:
                     pass
                 self.voice_animation = None
 
         def set_volume(self, value_0_to_100):
-            self.audio_manager.apply_volume(value_0_to_100)
+            self.audio_manager.set_volume(value_0_to_100)
 
         def toggle_detection(self):
             self.detection_active = not self.detection_active
             self.config.set('System', 'drowsiness_detection', str(self.detection_active))
             self.config.write()
-            detect_module = sys.modules.get('detection.detect')
-            if detect_module:
-                detect_module.set_detection_enabled(self.detection_active)
+            _send_detect_command("/set_detection_enabled", {"enabled": self.detection_active})
             if not self.detection_active:
                 self.show_message_overlay()
-                if getattr(self, 'audio_manager', None): # stop alarm if it's currently playing
+                if getattr(self, 'audio_manager', None):
                     self.audio_manager.stop_track()
             print(f"[System] Drowsiness Detection: {'Enabled' if self.detection_active else 'Disabled'}")
 
         def set_sensitivity(self, preset):
-            detect_module = sys.modules.get('detection.detect')
-            if detect_module:
-                detect_module.set_sensitivity(preset)
+            _send_detect_command("/set_sensitivity", {"preset": preset})
             self.sensitivity = preset
             self.config.set('System', 'sensitivity', preset)
             self.config.write()
@@ -276,34 +302,27 @@ class SentinelApp(App):
             if self.audio_manager:
                 print("[System] Fail-safe triggered via Voice Command!")
 
-                # make sure that the alarm doesn't permanently stop after pressing failsafe
-                # POST request to _do_stop() so it can reset alarm_playing flag to false
                 def _post():
-                    import urllib.request
-                    req = urllib.request.Request(
-                        "http://127.0.0.1:5000/alert_cleared", # endpoint
+                    req = urlreq.Request(
+                        "http://127.0.0.1:5000/alert_cleared",
                         data=b"{}",
                         headers={"Content-Type": "application/json"}
                     )
                     try:
-                        urllib.request.urlopen(req, timeout=0.5)
+                        urlreq.urlopen(req, timeout=0.5)
                     except Exception:
                         pass
                 threading.Thread(target=_post, daemon=True).start()
         
         @mainthread
         def show_message_overlay(self):
-            # avoid duplicates
             if getattr(self, 'message_overlay', None):
                 return
             
-            # random message from library or default
             message = random.choice(self.message_library) if getattr(self, 'message_library', None) else "Stay alert!"
             
-            # full-screen semi-transparent overlay
             mv = ModalView(size_hint=(1,1), auto_dismiss=False, background_color=(0, 0, 0, 0.75))
 
-            # add message w/ gif as a vertical box layout
             content = BoxLayout(orientation='vertical', 
                                 spacing = dp(8),
                                 padding=dp(16),
@@ -318,34 +337,29 @@ class SentinelApp(App):
                 halign='center',
                 valign='middle',
             )
-            label.bind(size=label.setter('text_size')) # make text wrap within label bounds
+            label.bind(size=label.setter('text_size'))
 
-            # create gif path
-            gif_path = os.path.join(os.path.dirname(__file__), '../icons/drivinggif.gif')
-            gif = Image(source=gif_path, allow_stretch=True, keep_ratio=True, size_hint=(1, None), height=dp(160)) # insert gif below text
+            gif_path = os.path.join(_BASE_DIR, '../icons/drivinggif.gif')
+            gif = Image(source=gif_path, allow_stretch=True, keep_ratio=True, size_hint=(1, None), height=dp(160))
 
-            # add widgets to layout
             content.add_widget(label)
             content.add_widget(gif)
 
             mv.add_widget(content)
-            mv.opacity = 0.0 # start invisible to fade in
+            mv.opacity = 0.0
             self.message_overlay = mv
             mv.open()
 
-            # fade in
             anim_in = Animation(opacity=1.0, duration=0.6)
             anim_in.start(mv)
 
-            # play celebration sound when showing message
-            celebration_sound_path = os.path.join(os.path.dirname(__file__), '../audio/celebration.mp3')
+            celebration_sound_path = os.path.join(_BASE_DIR, '../audio/celebration.mp3')
             if getattr(self, 'audio_manager', None):
                 self.audio_manager.play_track(celebration_sound_path)
 
-            # schedule fade out after 10 seconds
             def _fade_out(dt):
                 anim_out = Animation(opacity=0.0, duration=0.6)
-                def _on_complete(animation, widget): # after fade out, dismiss and clean up reference
+                def _on_complete(animation, widget):
                     try:
                         widget.dismiss()
                     except Exception:
