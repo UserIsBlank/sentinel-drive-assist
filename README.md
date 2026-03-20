@@ -17,6 +17,7 @@ Hardware:
 * Raspberry Pi 5 (Bookworm)
 * Raspberry Pi Camera Module 3
 * Microphone USB
+![rpi-layout](https://github.com/user-attachments/assets/857d5ceb-1e8c-4e92-b38e-bd60e432720c)
 
 ## Dependencies / Models
 
