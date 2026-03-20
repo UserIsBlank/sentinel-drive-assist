@@ -13,9 +13,10 @@ Sentinel Drive-Assist is a real-time drowsiness detection system that helps driv
 
 # Getting Started
 
-This section should provide instructions for other developers too
-
-These instructions will get you a copy of the project up and running on your local machine for development and testing purposes. See deployment for notes on how to deploy the project on a live system.
+Hardware:
+* Raspberry Pi 5 (Bookworm)
+* Raspberry Pi Camera Module 3
+* Microphone USB
 
 ## Dependencies / Models
 
