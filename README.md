@@ -42,12 +42,12 @@ git clone git@github.com:https://github.com/UserIsBlank/sentinel-drive-assist.gi
 
 ## Installation
 
-Instructions for how to install your project's build artifacts
-
+Install Required Dependancies
 ```
-Examples should be included
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
-
 
 **[Back to top](#table-of-contents)**
 
