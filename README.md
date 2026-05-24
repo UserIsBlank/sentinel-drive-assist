@@ -18,7 +18,7 @@ Hardware:
 * Raspberry Pi Camera Module 3
 * Microphone USB
 <img width="4337" height="2817" alt="sentinel" src="https://github.com/user-attachments/assets/e6bd91d6-7dc1-4939-a732-4a66d2822ed3" />
-![rpi-layout](https://github.com/user-attachments/assets/857d5ceb-1e8c-4e92-b38e-bd60e432720c)
+<img width="4337" height="2817" alt="sentinel" src="https://github.com/user-attachments/assets/857d5ceb-1e8c-4e92-b38e-bd60e432720c" />
 
 ## Dependencies / Models
 
